@@ -3,5 +3,5 @@ node_modules
 // sdk
 // AgoraCoreService
 *.node
-// output
+output
 .vscode
