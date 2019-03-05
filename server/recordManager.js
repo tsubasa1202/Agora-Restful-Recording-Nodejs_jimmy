@@ -2,6 +2,7 @@ const AgoraRecordingSDK = require("../record/AgoraRecordSdk");
 const path = require("path");
 const fs = require("fs");
 const uuidv4 = require('uuid/v4');
+const moment = require('moment-timezone');
 
 class RecordManager{
     constructor() {
@@ -19,8 +20,9 @@ class RecordManager{
     }
 
     initStorage(appid, channel, sid) {
+	const now = moment().tz("Asia/Tokyo").format("YYYY-MM-DD")
         return new Promise((resolve, reject) => {
-            const storagePath = path.resolve(__dirname, `./output/${channel}/${sid}`);
+            const storagePath = path.resolve(__dirname, `./output/${now}/${channel}/${sid}`);
             fs.mkdir(storagePath, {recursive: true}, err => {
                 if(err){
                     throw err;
