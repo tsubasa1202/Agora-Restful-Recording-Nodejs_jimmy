@@ -20,14 +20,15 @@ public class RecordingSDK {
 	 * Brief: load Cpp library
 	 */
 
-    static {
-        System.loadLibrary("recording");
-    }
+	static {
+		System.loadLibrary("recording");
+	}
 
 	public RecordingSDK() {
 		recordingEventHandlers = new ArrayList<RecordingEventHandler>();
 	}
-    
+
+
 	public void registerOberserver(RecordingEventHandler recordingEventHandler) {
 		if (!recordingEventHandlers.contains(recordingEventHandler)) {
 			recordingEventHandlers.add(recordingEventHandler);
@@ -59,7 +60,7 @@ public class RecordingSDK {
 	 * 
 	 * @return true: Method call succeeded. false: Method call failed.
 	 */
-	public native boolean createChannel(String appId, String channelKey, String name, int uid, RecordingConfig config);
+	public native boolean createChannel(String appId, String channelKey, String name, int uid, RecordingConfig config, int logLevel);
 
 	/*
 	 * Brief: Stop recording
@@ -108,6 +109,23 @@ public class RecordingSDK {
 	 */
     public native RecordingEngineProperties getProperties(long nativeHandle);
 
+    /*
+     * Brief: set background image for specified user with uid
+     * @param uid : the uid whose background image to set
+     * @param image_path the image path to be used as background.
+     * @return 0: Method call succeeded. <0: Method call failed.
+     */
+    private native int setUserBackground(long nativeHandle, int uid, String image_path);
+    /*
+     * Brief: set recording engine log level.
+     * @param level : the intended level to be set.
+     */
+
+    private native void setLogLevel(long nativeHandle, int level);
+
+    /*
+     * Brief: When call createChannel successfully, JNI will call back this method to set the recording engine.
+     */
     /*
      * Brief: When call createChannel successfully, JNI will call back this
      * method to set the recording engine.
@@ -192,11 +210,21 @@ public class RecordingSDK {
 	 * 
 	 * @param frame reference of received audio frame
 	 */
-	private void audioFrameReceived(long uid, int type, AudioFrame frame) {
+	private void audioFrameReceived(long uid, AudioFrame frame) {
 		for (RecordingEventHandler oberserver : recordingEventHandlers) {
-			oberserver.audioFrameReceived(uid, type, frame);
+			oberserver.audioFrameReceived(uid, frame);
 		}
 	}
+
+    /*
+     * Brief: Callback when user is the active speaker 
+     * @param uid  user ID
+     */
+    private void onActiveSpeaker(long uid) {
+		for (RecordingEventHandler oberserver : recordingEventHandlers) {
+            oberserver.onActiveSpeaker(uid);
+        }
+    }
 
     /*
      * Brief: Callback when received a video frame

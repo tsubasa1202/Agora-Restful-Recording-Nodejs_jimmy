@@ -12,7 +12,7 @@
 #include "base/atomic.h"
 #include "base/log.h" 
 #include "base/opt_parser.h" 
-#include "agorasdk/AgoraSdk.h" 
+#include "agorasdk/AgoraSdk.h"
 using std::string;
 using std::cout;
 using std::cerr;
@@ -49,6 +49,7 @@ int main(int argc, char * const argv[]) {
   string channelKey;
   string name;
   uint32_t channelProfile = 0;
+  uint32_t audioProfile = 0;
 
   string decryptionMode;
   string secret;
@@ -61,6 +62,8 @@ int main(int argc, char * const argv[]) {
   string recordFileRootDir = "";
   string cfgFilePath = "";
   string proxyServer;
+  string videoBg = "";
+  string userBg = "";
 
   int lowUdpPort = 0;//40000;
   int highUdpPort = 0;//40004;
@@ -68,7 +71,7 @@ int main(int argc, char * const argv[]) {
   bool isAudioOnly=0;
   bool isVideoOnly=0;
   bool isMixingEnabled=0;
-  bool mixedVideoAudio=0;
+  uint32_t mixedVideoAudio= static_cast<int>(agora::linuxsdk::MIXED_AV_CODEC_TYPE::MIXED_AV_DEFAULT);
 
   uint32_t getAudioFrame = agora::linuxsdk::AUDIO_FORMAT_DEFAULT_TYPE;
   uint32_t getVideoFrame = agora::linuxsdk::VIDEO_FORMAT_DEFAULT_TYPE;
@@ -79,7 +82,10 @@ int main(int argc, char * const argv[]) {
   int fps = 0;
   int kbps = 0;
   int triggerMode = agora::linuxsdk::AUTOMATICALLY_MODE;
-
+  int audioIndicationInterval = 0;
+  int logLevel = agora::linuxsdk::AGORA_LOG_LEVEL_INFO;
+  int layoutMode = 0;
+  int maxResolutionUid = -1;
   /**
    * change log_config Facility per your specific purpose like agora::base::LOCAL5_LOG_FCLT
    * Default:USER_LOG_FCLT. 
@@ -110,7 +116,7 @@ int main(int argc, char * const argv[]) {
   parser.add_long_opt("isVideoOnly", &isVideoOnly, "Default 0:A/V, 1:VideoOnly (0:1)/option");
   parser.add_long_opt("isMixingEnabled", &isMixingEnabled, "Mixing Enable? (0:1)/option");
   parser.add_long_opt("mixResolution", &mixResolution, "change default resolution for vdieo mix mode/option");
-  parser.add_long_opt("mixedVideoAudio", &mixedVideoAudio, "mixVideoAudio:(0:seperated Audio,Video) (1:mixed Audio & Video), default is 0 /option");
+  parser.add_long_opt("mixedVideoAudio", &mixedVideoAudio, "mixVideoAudio:(0:seperated Audio,Video) (1:mixed Audio & Video with legacy codec) (2:mixed Audio & Video with new codec), default is 0 /option");
 
   parser.add_long_opt("decryptionMode", &decryptionMode, "decryption Mode, default is NULL/option");
   parser.add_long_opt("secret", &secret, "input secret when enable decryptionMode/option");
@@ -128,6 +134,13 @@ int main(int argc, char * const argv[]) {
   parser.add_long_opt("streamType", &streamType, "remote video stream type(0:STREAM_HIGH,1:STREAM_LOW), default is 0/option");
   parser.add_long_opt("triggerMode", &triggerMode, "triggerMode:(0: automatically mode, 1: manually mode) default is 0/option");
   parser.add_long_opt("proxyServer", &proxyServer, "proxyServer:format ip:port, eg,\"127.0.0.1:1080\"/option");
+  parser.add_long_opt("audioProfile", &audioProfile, "audio quality: (0: single channelstandard 1: single channel high quality 2:multiple channel high quality");
+  parser.add_long_opt("audioIndicationInterval", &audioIndicationInterval, "audioIndicationInterval:(0: no indication, audio indication interval(ms)) default is 0/option");
+  parser.add_long_opt("defaultVideoBg", &videoBg, "default video background/option");
+  parser.add_long_opt("defaultUserBg", &userBg, "default user background/option");
+  parser.add_long_opt("logLevel", &logLevel, "log level default INFO/option");
+  parser.add_long_opt("layoutMode", &layoutMode, "layoutMode:(0: default layout, 1:bestFit Layout mode, 2:vertical presentation Layout mode) default is 0/option");
+  parser.add_long_opt("maxResolutionUid", &maxResolutionUid, "uid with maxest resolution under vertical presentation Layout mode  ( default is -1 /option");
 
   if (!parser.parse_opts(argc, argv) || appId.empty() || name.empty()) {
     std::ostringstream sout;
@@ -141,24 +154,19 @@ int main(int argc, char * const argv[]) {
       signal(SIGUSR2, stop_service);
   }
   
-  if(!recordFileRootDir.empty() && !cfgFilePath.empty()){
-    LOG(ERROR,"Client can't set both recordFileRootDir and cfgFilePath");
-    return -1;
-  }
-
-  if(recordFileRootDir.empty() && cfgFilePath.empty())
+  if(recordFileRootDir.empty())
       recordFileRootDir = ".";
 
   //Once recording video under video mixing model, client needs to config width, height, fps and kbps
   if(isMixingEnabled && !isAudioOnly) {
      if(4 != sscanf(mixResolution.c_str(), "%d,%d,%d,%d", &width,
                   &height, &fps, &kbps)) {
-        LOG(ERROR, "Illegal resolution: %s", mixResolution.c_str());
+        CM_LOG(ERROR, "Illegal resolution: %s", mixResolution.c_str());
         return -1;
      }
   }
 
-  LOG(INFO, "uid %" PRIu32 " from vendor %s is joining channel %s",
+  CM_LOG(INFO, "uid %" PRIu32 " from vendor %s is joining channel %s",
           uid, appId.c_str(), name.c_str());
 
   agora::AgoraSdk recorder;
@@ -170,7 +178,7 @@ int main(int argc, char * const argv[]) {
   config.isAudioOnly = isAudioOnly;
   config.isMixingEnabled = isMixingEnabled;
   config.mixResolution = (isMixingEnabled && !isAudioOnly)? const_cast<char*>(mixResolution.c_str()):NULL;
-  config.mixedVideoAudio = mixedVideoAudio;
+  config.mixedVideoAudio = static_cast<agora::linuxsdk::MIXED_AV_CODEC_TYPE>(mixedVideoAudio);
 
   config.appliteDir = const_cast<char*>(applitePath.c_str());
   config.recordFileRootDir = const_cast<char*>(recordFileRootDir.c_str());
@@ -183,13 +191,28 @@ int main(int argc, char * const argv[]) {
   config.lowUdpPort = lowUdpPort;
   config.highUdpPort = highUdpPort;
   config.captureInterval = captureInterval;
+  config.audioIndicationInterval = audioIndicationInterval;
 
   config.decodeAudio = static_cast<agora::linuxsdk::AUDIO_FORMAT_TYPE>(getAudioFrame);
   config.decodeVideo = static_cast<agora::linuxsdk::VIDEO_FORMAT_TYPE>(getVideoFrame);
   config.streamType = static_cast<agora::linuxsdk::REMOTE_VIDEO_STREAM_TYPE>(streamType);
   config.triggerMode = static_cast<agora::linuxsdk::TRIGGER_MODE_TYPE>(triggerMode);
 
+  if(audioProfile > 2) 
+      audioProfile = 2;
+
+  config.audioProfile = (agora::linuxsdk::AUDIO_PROFILE_TYPE)audioProfile;
+  config.defaultVideoBg = videoBg.empty() ? NULL : const_cast<char*>(videoBg.c_str());
+  config.defaultUserBg = userBg.empty() ? NULL : const_cast<char*>(userBg.c_str());
+
+
   recorder.updateMixModeSetting(width, height, isMixingEnabled ? !isAudioOnly:false);
+  recorder.updateLayoutSetting(layoutMode, maxResolutionUid);
+  if(logLevel < agora::linuxsdk::AGORA_LOG_LEVEL_FATAL)
+      logLevel = agora::linuxsdk::AGORA_LOG_LEVEL_FATAL;
+  if(logLevel > agora::linuxsdk::AGORA_LOG_LEVEL_DEBUG)
+      logLevel = agora::linuxsdk::AGORA_LOG_LEVEL_DEBUG;
+  recorder.setLogLevel((agora::linuxsdk::agora_log_level)logLevel);
 
   if (!recorder.createChannel(appId, channelKey, name, uid, config)) {
     cerr << "Failed to create agora channel: " << name << endl;

@@ -1,4 +1,3 @@
-
 //define signatures
 #define LONG_SIGNATURE "J"
 #define INT_SIGNATURE "I"
@@ -12,6 +11,7 @@
 #define BYTEARRAY "[B"
 #define CHANNEL_PROFILE_SIGNATURE "Lio/agora/recording/common/Common$CHANNEL_PROFILE_TYPE;"
 #define REMOTE_VIDEO_STREAM_SIGNATURE "Lio/agora/recording/common/Common$REMOTE_VIDEO_STREAM_TYPE;"
+#define MIXED_AV_CODEC_TYPE_SIGNATURE "Lio/agora/recording/common/Common$MIXED_AV_CODEC_TYPE;"
 //-----------------Video Begin-------------------
 //#define VIDEOFRAME_SIGNATURE "io/agora/recording/common/Common$VideoFrame"
 #define VIDEOFRAME_H264_SIGNATURE "Lio/agora/recording/common/Common$VideoH264Frame;"
@@ -75,11 +75,11 @@
 #define CN_AUDIO_AAC_FRAME "io/agora/recording/common/Common$AudioAacFrame"
 #define CN_AUDIO_PCM_FRAME "io/agora/recording/common/Common$AudioPcmFrame"
 //#define SN_CB_FUNC_RECEIVE_AUDIOFRAME "(JLio/agora/recording/common/Common$AudioFrame;)V"
-#define SN_CB_FUNC_RECEIVE_AUDIOFRAME "(JILio/agora/recording/common/Common$AudioFrame;)V"
+#define SN_CB_FUNC_RECEIVE_AUDIOFRAME "(JLio/agora/recording/common/Common$AudioFrame;)V"
 
 #define SN_AUDIO_FRAME_TYPE "Lio/agora/recording/common/Common$AUDIO_FRAME_TYPE;"
 #define SN_INIT_MTD_AUDIO_FRAME "(Lio/agora/recording/common/Common;JJJ)V"
-#define SN_INIT_MTD_AAC_AUDIO_FRAME "(Lio/agora/recording/common/Common;J)V"
+#define SN_INIT_MTD_AUDIO_AAC_FRAME "(Lio/agora/recording/common/Common;J)V"
 
 #define SN_AUDIO_PCM_FRAME "Lio/agora/recording/common/Common$AudioPcmFrame;"
 #define SN_AUDIO_AAC_FRAME "Lio/agora/recording/common/Common$AudioAacFrame;"
@@ -95,10 +95,14 @@
 #define FID_PCMBUF "pcmBuf"
 #define FID_AACBUF "aacBuf"
 #define FID_PCMBUFFERSIZE "pcmBufSize"
-#define FID_AACBUFFERSIZE "aacBufSize"
+#define FID_TYPE "type"
 #define FID_PCM "pcm"
 #define FID_AAC "aac"
+#define FID_AACBUF "aacBuf"
+#define FID_AACBUFFERSIZE "aacBufSize"
 #define FID_CHANNELNUM "frame_num"
+#define FID_CHANNELS "channels"
+#define FID_BITRATE "bitrate"
 
 //-----------------Callback Java method----------------
 
@@ -119,8 +123,9 @@ enum CBObjectMethodId {
   MID_ON_AUDIOFRAME_RECEIVED = 4,
   MID_ON_VIDEOFRAME_RECEIVED = 5,
   MID_ON_LEAVECHANNEL = 6,
-  MID_ON_JOINCHANNEL_SUCCESS = 7,
-  MID_CBOBJECT_NUM = 8,
+  MID_ON_ACTIVE_SPEAKER = 7,
+   MID_ON_JOINCHANNEL_SUCCESS = 8,
+  MID_CBOBJECT_NUM = 9,
  
 };
 enum ClassMethodId {
@@ -134,9 +139,10 @@ static JavaObjectMethod jCBObjectMethods[] = {
   { MID_ON_WARNING, "onWarning", "(I)V" },
   { MID_ON_USEROFFLINE, "onUserOffline", "(JI)V" },
   { MID_ON_USERJOINED, "onUserJoined", "(JLjava/lang/String;)V"},
-  { MID_ON_AUDIOFRAME_RECEIVED, "audioFrameReceived", "(JILio/agora/recording/common/Common$AudioFrame;)V"},
+  { MID_ON_AUDIOFRAME_RECEIVED, "audioFrameReceived", "(JLio/agora/recording/common/Common$AudioFrame;)V"},
   { MID_ON_VIDEOFRAME_RECEIVED, "videoFrameReceived","(JILio/agora/recording/common/Common$VideoFrame;I)V"},
   { MID_ON_LEAVECHANNEL, "onLeaveChannel", "(I)V"},
+  { MID_ON_ACTIVE_SPEAKER, "onActiveSpeaker", "(J)V"},
   { MID_ON_JOINCHANNEL_SUCCESS, "onJoinChannelSuccess", "(Ljava/lang/String;J)V"},
 };
 //video
@@ -194,11 +200,13 @@ static JavaObjectMethod jVideoJpgFrameFields[] = {
 };
 //audio
 enum FID_AUDIOFRAME{
-  FID_AF_PCM = 0,
-  FID_AF_AAC = 1,
-  FID_AF_NUM= 2
+  FID_AF_TYPE = 0,
+  FID_AF_PCM = 1,
+  FID_AF_AAC = 2,
+  FID_AF_NUM= 3 
 };
 static JavaObjectMethod jAudioFrameFields[] = {
+  {FID_AF_TYPE, FID_TYPE, SN_AUDIO_FRAME_TYPE},
   {FID_AF_PCM, FID_PCM, SN_AUDIO_PCM_FRAME},
   {FID_AF_AAC, FID_AAC, SN_AUDIO_AAC_FRAME}
 };
@@ -225,13 +233,14 @@ enum FID_AACFRAME{
   FID_AAC_FRAMEMS = 0,
   FID_AAC_BUF = 1,
   FID_AAC_BUFSIZE = 2,
-  FID_AACNUM = 3
+  FID_AAC_CHANNELS = 3,
+  FID_AAC_BITRATE = 4,
+  FID_AACNUM = 5 
 };
 static JavaObjectMethod jAudioAacFrameFields[] = {
   {FID_AAC_FRAMEMS, FID_FRAME_MS,LONG_SIGNATURE},
   {FID_AAC_BUF, FID_AACBUF, BYTEARRAY},
-  {FID_AAC_BUFSIZE, FID_AACBUFFERSIZE, LONG_SIGNATURE}
+  {FID_AAC_BUFSIZE, FID_AACBUFFERSIZE, LONG_SIGNATURE},
+  {FID_AAC_CHANNELS, FID_CHANNELS, INT_SIGNATURE},
+  {FID_AAC_BITRATE, FID_BITRATE, INT_SIGNATURE},
 };
-
-
-

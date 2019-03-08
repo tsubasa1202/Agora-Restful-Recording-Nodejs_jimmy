@@ -87,15 +87,22 @@ public:
      *
      */
     virtual void videoFrameReceived(unsigned int uid, const agora::linuxsdk::VideoFrame *frame) const = 0;
-};
 
- 
+    /**
+     * the speaker who is active in the channel 
+     *
+     *
+     *  @param uid          user ID
+     *
+     */
+    virtual void onActiveSpeaker(uid_t uid)  = 0;
+};
 
 typedef struct RecordingConfig {
     bool isAudioOnly;
     bool isVideoOnly;
     bool isMixingEnabled;
-    bool mixedVideoAudio;
+    agora::linuxsdk::MIXED_AV_CODEC_TYPE mixedVideoAudio;
     char * mixResolution;
     char * decryptionMode;
     char * secret;
@@ -108,11 +115,16 @@ typedef struct RecordingConfig {
     int highUdpPort;  
     int idleLimitSec;
     int captureInterval;
+    int audioIndicationInterval;
     agora::linuxsdk::CHANNEL_PROFILE_TYPE channelProfile;
     agora::linuxsdk::REMOTE_VIDEO_STREAM_TYPE streamType;
     agora::linuxsdk::TRIGGER_MODE_TYPE triggerMode;
     agora::linuxsdk::LANGUAGE_TYPE lang;
     char * proxyServer;
+    agora::linuxsdk::AUDIO_PROFILE_TYPE audioProfile;
+    char * defaultVideoBg;
+    char * defaultUserBg;
+
 
     RecordingConfig(): channelProfile(agora::linuxsdk::CHANNEL_PROFILE_COMMUNICATION),
         isAudioOnly(false),
@@ -130,11 +142,14 @@ typedef struct RecordingConfig {
         captureInterval(5),
         decodeAudio(agora::linuxsdk::AUDIO_FORMAT_DEFAULT_TYPE),
         decodeVideo(agora::linuxsdk::VIDEO_FORMAT_DEFAULT_TYPE),
-        mixedVideoAudio(false),
+        mixedVideoAudio(agora::linuxsdk::MIXED_AV_DEFAULT),
         streamType(agora::linuxsdk::REMOTE_VIDEO_STREAM_HIGH),
         triggerMode(agora::linuxsdk::AUTOMATICALLY_MODE),
         lang(agora::linuxsdk::CPP_LANG),
-        proxyServer(NULL)
+        proxyServer(NULL),
+        audioProfile(agora::linuxsdk::AUDIO_PROFILE_DEFAULT),
+        defaultVideoBg(NULL),
+        defaultUserBg(NULL)
     {}
 
     virtual ~RecordingConfig() {}
@@ -181,7 +196,7 @@ public:
      *  @return 0: Method call succeeded. <0: Method call failed.
      */
     virtual int setVideoMixingLayout(const agora::linuxsdk::VideoMixingLayout &layout) = 0;
-
+   
     /**
      *  stopped onError handler
      *
@@ -221,6 +236,26 @@ public:
      *  @return 0: Method call succeeded. <0: Method call failed.
      */
     virtual int stopService() = 0;
+     
+    /**
+     * set the background image for specific user
+     *
+     * @param uid user id whose background image would be set
+     * 
+     * @param img_path the background image path.
+     *
+     * return 0: Method call succeeded. <0: Method call failed.
+     */
+    virtual int setUserBackground(uid_t uid, const char* img_path) = 0;
+
+    /**
+     * set the log level
+     *
+     * @param level the log level to be enabled
+     * 
+     * return 0: Method call succeeded. <0: Method call failed.
+     */
+    virtual int setLogLevel(agora::linuxsdk::agora_log_level level) = 0;
 };
 
 }

@@ -47,13 +47,13 @@ class AudioClip:
     def max_length(self):
         return max(self.end_time)
 
-    def print_filename(self):
+    def print_filename(self, offset_time):
         str = ""
         for i in range(self.num):
             if i > 0:
                 len = self.start_time[i] - self.end_time[i-1]
             else:
-                len = self.start_time[0]
+                len = self.start_time[0] - offset_time
             if len < 0.001:
                 len = 0.001
             str = str + ("-f lavfi -t %.3f -i anullsrc=channel_layout=mono:sample_rate=48000 " % len)
@@ -63,18 +63,20 @@ class AudioClip:
     def print_audio_info(self, i):
         print "Audio Clip %d: %s: start_time=%.3f, end_time=%.3f" % (i, self.filename[i], self.start_time[i], self.end_time[i])
 
-    def print_ffmpeg(self, output_file):
+    def print_ffmpeg(self, output_file, offset_time):
         if self.num >= 1:
-            str = "ffmpeg " + self.print_filename()
+            str = "ffmpeg " + self.print_filename(offset_time)
             str = str + "-filter_complex \"concat=n=%d:v=0:a=1[audio]\" " % (self.num * 2)
-            str = str + " -map \"[audio]\" -to %f -y %s" % (self.max_length(), output_file)
+            str = str + " -map \"[audio]\" -to %f -y %s" % (self.max_length() - offset_time, output_file)
         elif self.num == 1:
             str = "ffmpeg -i %s -c:a copy %s" % (self.filename[0], output_file)
         else:
             str = ""
         str = str + " 2>&1 | tee -a convert.log"
+        print "==============================audio ffmpeg====================================="
+        print str
         return str
- 
+
 class RotateClip:
     def __init__(self):
         self.start_time = 0.0
@@ -146,7 +148,8 @@ class VideoClip:
         return self.audio_file != "" and self.audio_start_time > 0.05
     def audio_apad_needed(self):
         return self.audio_file != "" and self.max_length() > self.audio_end_time
-    def print_filter(self):
+   
+    def print_filter(self, offset_time):
         str = "" 
         if self.audio_delay_needed():
             audio_delay = int(self.audio_start_time*1000)
@@ -184,25 +187,25 @@ class VideoClip:
                 sink = "video"
 
             tmp = "[%s]scale=%dx%d,setpts=PTS-STARTPTS+%.3f/TB[scale%s];[%s][scale%s]overlay=eof_action=pass[%s];" % \
-                    ( src, self.target_width, self.target_height, self.start_time[i], src, source, src, sink )
+                    ( src, self.target_width, self.target_height, self.start_time[i] - offset_time, src, source, src, sink )
             str = str + tmp
             source = sink
         return str[:-1]
-    
+   
     def print_filename(self):
         str = ""
         for i in range(self.num):
             str = str + ("-i %s " % self.filename[i])
         return str
-    
-    def print_ffmpeg(self, output_file):
+   
+    def print_ffmpeg(self, output_file, offset_time):
         if self.audio_file == "":
             str = "ffmpeg -f lavfi -i anullsrc "
         else:
             str = "ffmpeg -i %s " % self.audio_file
         str = str + "-f lavfi -i \"color=black:s=%dx%d:r=15\" " % (self.target_width, self.target_height)
         str = str + self.print_filename()
-        str = str + "-filter_complex \"%s\" " % self.print_filter()
+        str = str + "-filter_complex \"%s\" " % self.print_filter(offset_time)
         if self.audio_file == "":
             map_option = "-map \"[video]\""
         else:
@@ -210,10 +213,11 @@ class VideoClip:
                 map_option = "-map \"[audio]\" -map \"[video]\" -c:a aac"
             else:
                 map_option = "-map 0:a:0 -map \"[video]\" -c:a copy"
-        str = str + " %s -c:v libx264 -r %d -preset veryfast -shortest -to %f -y %s" % (map_option, dest_fps, self.max_length(), output_file)
+        str = str + " %s -c:v libx264 -r %d -preset veryfast -shortest -to %f -y %s" % (map_option, dest_fps, self.max_length() - offset_time, output_file)
         str = str + " 2>&1 | tee -a convert.log"
+        print "=================================video ffmpeg ========================"
+        print str
         return str
-    
     def print_audio_info(self):
         print "Audio Clip: %s: start_time=%.3f, end_time=%.3f" % (self.audio_file, self.audio_start_time, self.audio_end_time)
     
@@ -234,140 +238,6 @@ def filter_pat(f, pat):
         items = line.split(" ");
 
     return (detected,lines)
-
-def UidFileConvert(uid_file, suffix, option):    
-        child_env = os.environ.copy()
-
-        uid = os.path.splitext(uid_file)[0][4:]
-        print "UID:"+uid
-            
-        clip = VideoClip()
-        audio_clip = AudioClip()
-        with open(uid_file) as f:
-            av_1st_stime = [False]
-            (hasSessionDetect, lines)=filter_pat(f, session_tag)
-            print("DEBUG:%s:%s" %(hasSessionDetect, lines))
-            for line in lines:
-                items = line.split(" ")
-                if os.path.getsize(items[1]) == 0:
-                    continue;
-                #audio file
-                if items[1][-3:] == "aac":
-                    index = audio_clip.put_file(items[1])
-                    if items[2] == "create":
-                        if not av_1st_stime[0]:
-                            av_1st_stime.append(float(items[0])) #mark it.
-
-                        audio_clip.start_time[index] = float(items[0])
-                    elif items[2] == "close":
-                        audio_clip.end_time[index] = float(items[0])
-                        
-                #video file
-                if items[1][-3:] == "mp4":
-                    index = clip.put_file(items[1])
-                    clip.put_rotateclip(index)
-                    if items[2] == "create":
-                        if not av_1st_stime[0]:
-                            av_1st_stime.append(float(items[0])) #mark it.
-
-                        clip.start_time[index] = float(items[0])
-                        clip.rotateclip[index].append(RotateClip())
-                        clip.rotateclip[index][clip.get_rotateclip_len(index) - 1].start_time = float(items[0])
-                    elif items[2] == "info":
-                        clip.start_time[index] = float(items[0])
-                        clip.width[index] = int(items[3][6:])
-                        clip.height[index] = int(items[4][7:])
-                        rotation = int(items[5][9:])
-                        #if rotation == 90 or rotation == 270:
-                        #    clip.width[index], clip.height[index] = clip.height[index], clip.width[index]
-			clip.rotateclip[index][clip.get_rotateclip_len(index) - 1].rotation = rotation
-                    elif items[2] == "rotate":
-                        rotation = int(items[3][9:])
-                        clip.rotateclip[index][clip.get_rotateclip_len(index) - 1].end_time = float(items[0])
-                        clip.rotateclip[index].append(RotateClip())
-                        clip.rotateclip[index][clip.get_rotateclip_len(index) - 1].start_time = float(items[0])
-                        clip.rotateclip[index][clip.get_rotateclip_len(index) - 1].rotation = rotation
-                    elif items[2] == "close":
-                        clip.end_time[index] = float(items[0])
-                        clip.rotateclip[index][clip.get_rotateclip_len(index) - 1].end_time = float(items[0])
-                #video file
-                if items[1][-4:] == "webm":
-                    index = clip.put_file(items[1])
-                    clip.put_rotateclip(index)
-                    if items[2] == "create":
-                        if not av_1st_stime[0]:
-                            av_1st_stime.append(float(items[0])) #mark it.
-                        clip.start_time[index] = float(items[0])
-                        clip.rotateclip[index].append(RotateClip())
-                        clip.rotateclip[index][clip.get_rotateclip_len(index) - 1].start_time = float(items[0])
-                    elif items[2] == "info":
-                        clip.start_time[index] = float(items[0])
-                        clip.width[index] = int(items[3][6:])
-                        clip.height[index] = int(items[4][7:])
-                        rotation = int(items[5][9:])
-                        #if rotation == 90 or rotation == 270:
-                        #    clip.width[index], clip.height[index] = clip.height[index], clip.width[index]
-			clip.rotateclip[index][clip.get_rotateclip_len(index) - 1].rotation = rotation
-                    elif items[2] == "rotate":
-                        rotation = int(items[3][9:])
-                        clip.rotateclip[index][clip.get_rotateclip_len(index) - 1].end_time = float(items[0])
-                        clip.rotateclip[index].append(RotateClip())
-                        clip.rotateclip[index][clip.get_rotateclip_len(index) - 1].start_time = float(items[0])
-                        clip.rotateclip[index][clip.get_rotateclip_len(index) - 1].rotation = rotation
-                    elif items[2] == "close":
-                        clip.end_time[index] = float(items[0])
-                        clip.rotateclip[index][clip.get_rotateclip_len(index) - 1].end_time = float(items[0])
-
-            if not option:
-                clip.update_audio_info(clip.audio_start_time - av_1st_stime[1],
-                        clip.audio_end_time - av_1st_stime[1])
-
-                for i in range(audio_clip.num):
-                    audio_clip.update_audio_info(i, audio_clip.start_time[i] - av_1st_stime[1],
-                            audio_clip.end_time[i] - av_1st_stime[1])
-
-                for i in range(clip.num):
-                    clip.update_video_info(i, clip.start_time[i] - av_1st_stime[1],
-                            clip.end_time[i] - av_1st_stime[1])
-
-            clip.print_audio_info()
-            for i in range(audio_clip.num):
-                audio_clip.print_audio_info(i)
-            for i in range(clip.num):
-                clip.print_video_info(i)
-                    
-        if audio_clip.num >= 1:
-                print "Generate Audio File"
-                tmp_audio = uid+"_tmp.m4a"
-                command = audio_clip.print_ffmpeg(tmp_audio)
-                clip.audio_file = tmp_audio
-                clip.audio_start_time = 0.0
-                clip.audio_end_time = audio_clip.max_length()
-                print command
-                subprocess.Popen(command, shell=True, env=child_env).wait()
-        elif audio_clip.num == 1:
-                clip.audio_file = audio_clip.filename[0]
-                clip.audio_start_time = audio_clip.start_time[0]
-                clip.audio_end_time = audio_clip.end_time[0]
-        if clip.num > 0:
-                print "Generate MP4 file:"
-                print "Output resolution:", clip.target_resolution()
-                output_file = uid + suffix + ".mp4"
-                #print clip.print_filter()
-                command =  clip.print_ffmpeg(output_file)
-        else:
-                tmp_audio = uid+"_tmp.m4a"
-                output_file = uid+".m4a"
-                if audio_clip.num >= 1:
-                    command = "mv %s %s" % (tmp_audio, output_file)
-                elif audio_clip.num == 1:
-                    command = "ffmpeg -i %s -c:a copy -y %s" % (clip.audio_file, output_file)
-        print command
-        subprocess.Popen(command, shell=True, env=child_env).wait()
-        print "\n\n"
-        #remove tmp files
-        os.system('rm -f *_tmp.m4a')
-        return
     
 class UserInfoPerMergedTxt:
     def __init__(self, ts, path):
@@ -403,54 +273,212 @@ class UserInfoMergedTxtDict:
         for i in mergedTxtDict[index]:
             print("uid:%s, data:%s" %(self.uid, self.mergedTxtDict[i]))
 
+class UserAvClip:
+    def __init__(self, start_time, end_time, uid_file):
+        self.start_time = start_time
+        self.end_time = end_time
+        self.uid_file = uid_file
 
-def SessionConvert(folder_name, opt, saving):
-    if not os.path.isdir(folder_name):
-        print "Folder " + folder_name + " does not exit"
-        return
-    
-    os.chdir(folder_name)
-    os.system('rm -f *_merge.txt')
-    all_uid_file = sorted(glob.glob("uid_*.txt"))
-    if opt == 0:
-        for uid_file in all_uid_file:
-            UidFileConvert(uid_file, "_av", 0)
-        #write a convert done file
-        f = open("convert-done.txt", "w")
-        f.close()
-        return
-    
-    #merge
-    dict_uid  = dict()
-    merged_index = -1
-    for uid_file in all_uid_file:
-        uid = uid_file.split("_")[1]
-        if not dict_uid.has_key(uid):
-            merged_index = 0
-            dict_uid[uid] = UserInfoMergedTxtDict(uid, merged_index, 0.0, "uid_" + uid +"_"+ str(merged_index) + "_merge.txt")
-    
-        start_ts = -1.0
-        last_ts = 0
+class UserAv:
+    def __init__(self, uid):
+        self.uid = uid
+        self.avClips = dict()
+        self.num = 0
+
+    def addClip(self, clip):
+        self.avClips[self.num] = clip
+        self.num += 1
+
+
+def UidFileConvert(uid_file, suffix, option, offset_time):    
+        print "Offset_time : " + str(offset_time)
+        child_env = os.environ.copy()
+
+        uid = os.path.splitext(uid_file)[0][4:]
+        print "UID:"+uid
+            
+        clip = VideoClip()
+        audio_clip = AudioClip()
         with open(uid_file) as f:
-            detectedOncePerTxt = False
+            av_1st_stime = [False]
             (hasSessionDetect, lines)=filter_pat(f, session_tag)
             print("DEBUG:%s:%s" %(hasSessionDetect, lines))
-    
             for line in lines:
                 items = line.split(" ")
                 if os.path.getsize(items[1]) == 0:
                     continue;
-                if not detectedOncePerTxt and (hasSessionDetect or float(items[0]) == 0.000):
-                    detectedOncePerTxt = True
-    
-                    if dict_uid[uid].mergedTxtDict[merged_index].detect_start:
-                        #already started,detect new one, so increase index
-                        merged_index += 1
-                        dict_uid[uid].update(uid, merged_index, 0.0, "uid_" + uid +"_"+ str(merged_index) + "_merge.txt")
-                       # dict_uid[uid].mergedTxtDict[merged_index]
+                #audio file
+                if items[1][-3:] == "aac":
+
+                    if option == 3:
+                        continue
+                    index = audio_clip.put_file(items[1])
+                    if items[2] == "create":
+                        if not av_1st_stime[0]:
+                            av_1st_stime.append(float(items[0])) #mark it.
+
+                        audio_clip.start_time[index] = float(items[0])
+                    elif items[2] == "close":
+                        audio_clip.end_time[index] = float(items[0])
+                        
+                #video file
+                if items[1][-3:] == "mp4":
+                    if option == 2:
+                        continue
+                    index = clip.put_file(items[1])
+                    clip.put_rotateclip(index)
+                    if items[2] == "create":
+                        if not av_1st_stime[0]:
+                            av_1st_stime.append(float(items[0])) #mark it.
+
+                        clip.start_time[index] = float(items[0])
+                        clip.rotateclip[index].append(RotateClip())
+                        clip.rotateclip[index][clip.get_rotateclip_len(index) - 1].start_time = float(items[0])
+                    elif items[2] == "info":
+                        clip.start_time[index] = float(items[0])
+                        clip.width[index] = int(items[3][6:])
+                        clip.height[index] = int(items[4][7:])
+                        rotation = int(items[5][9:])
+                        #if rotation == 90 or rotation == 270:
+                        #    clip.width[index], clip.height[index] = clip.height[index], clip.width[index]
+                        clip.rotateclip[index][clip.get_rotateclip_len(index) - 1].rotation = rotation
+
+                    elif items[2] == "rotate":
+                        rotation = int(items[3][9:])
+                        clip.rotateclip[index][clip.get_rotateclip_len(index) - 1].end_time = float(items[0])
+                        clip.rotateclip[index].append(RotateClip())
+                        clip.rotateclip[index][clip.get_rotateclip_len(index) - 1].start_time = float(items[0])
+                        clip.rotateclip[index][clip.get_rotateclip_len(index) - 1].rotation = rotation
+
+                    elif items[2] == "close":
+                        clip.end_time[index] = float(items[0])
+                        clip.rotateclip[index][clip.get_rotateclip_len(index) - 1].end_time = float(items[0])
+                #video file
+                if items[1][-4:] == "webm":
+                    if option == 2:
+                        continue
+                    index = clip.put_file(items[1])
+                    clip.put_rotateclip(index)
+                    if items[2] == "create":
+                        if not av_1st_stime[0]:
+                            av_1st_stime.append(float(items[0])) #mark it.
+                        clip.start_time[index] = float(items[0])
+                        clip.rotateclip[index].append(RotateClip())
+                        clip.rotateclip[index][clip.get_rotateclip_len(index) - 1].start_time = float(items[0])
+                    elif items[2] == "info":
+                        clip.start_time[index] = float(items[0])
+                        clip.width[index] = int(items[3][6:])
+                        clip.height[index] = int(items[4][7:])
+                        rotation = int(items[5][9:])
+                        #if rotation == 90 or rotation == 270:
+                        #    clip.width[index], clip.height[index] = clip.height[index], clip.width[index]
+                        clip.rotateclip[index][clip.get_rotateclip_len(index) - 1].rotation = rotation
+                    elif items[2] == "rotate":
+                        rotation = int(items[3][9:])
+                        clip.rotateclip[index][clip.get_rotateclip_len(index) - 1].end_time = float(items[0])
+                        clip.rotateclip[index].append(RotateClip())
+                        clip.rotateclip[index][clip.get_rotateclip_len(index) - 1].start_time = float(items[0])
+                        clip.rotateclip[index][clip.get_rotateclip_len(index) - 1].rotation = rotation
+                    elif items[2] == "close":
+                        clip.end_time[index] = float(items[0])
+                        clip.rotateclip[index][clip.get_rotateclip_len(index) - 1].end_time = float(items[0])
+
+            if not option:
+                clip.update_audio_info(clip.audio_start_time - av_1st_stime[1],
+                        clip.audio_end_time - av_1st_stime[1])
+
+                for i in range(audio_clip.num):
+                    audio_clip.update_audio_info(i, audio_clip.start_time[i] - av_1st_stime[1],
+                            audio_clip.end_time[i] - av_1st_stime[1])
+
+                for i in range(clip.num):
+                    clip.update_video_info(i, clip.start_time[i] - av_1st_stime[1],
+                            clip.end_time[i] - av_1st_stime[1])
+
+            clip.print_audio_info()
+            for i in range(audio_clip.num):
+                audio_clip.print_audio_info(i)
+            for i in range(clip.num):
+                clip.print_video_info(i)
                     
-                    dict_uid[uid].mergedTxtDict[merged_index].detect_start = True                        
+        if audio_clip.num >= 1:
+                print "Generate Audio File"
+                tmp_audio = uid+"_tmp.m4a"
+                command = audio_clip.print_ffmpeg(tmp_audio, offset_time)
+                clip.audio_file = tmp_audio
+                clip.audio_start_time = 0.0
+                clip.audio_end_time = audio_clip.max_length()
+                print command
+                subprocess.Popen(command, shell=True, env=child_env).wait()
+        elif audio_clip.num == 1:
+                clip.audio_file = audio_clip.filename[0]
+                clip.audio_start_time = audio_clip.start_time[0]
+                clip.audio_end_time = audio_clip.end_time[0]
+        if clip.num > 0:
+                print "Generate MP4 file:"
+                print "Output resolution:", clip.target_resolution()
+                output_file = uid + suffix + ".mp4"
+                command =  clip.print_ffmpeg(output_file, offset_time)
+        else:
+                tmp_audio = uid+"_tmp.m4a"
+                output_file = uid+".m4a"
+                if audio_clip.num >= 1:
+                    command = "mv %s %s" % (tmp_audio, output_file)
+                elif audio_clip.num == 1:
+                    command = "ffmpeg -i %s -c:a copy -y %s" % (clip.audio_file, output_file)
+        print command
+        subprocess.Popen(command, shell=True, env=child_env).wait()
+        print "\n\n"
+        #remove tmp files
+        os.system('rm -f *_tmp.m4a')
+        return output_file
     
+
+def SessionConvert(folder_name, opt, saving):
+    child_env = os.environ.copy()
+    if not os.path.isdir(folder_name):
+        print "Folder " + folder_name + " does not exist"
+        return
+
+    os.chdir(folder_name)
+    os.system('rm -f *_merge.txt')
+    all_uid_file = sorted(glob.glob("uid_*.txt"))
+    if opt == 0 :
+        for uid_file in all_uid_file:
+            UidFileConvert(uid_file, "_av", 0, 0)
+
+        f = open("convert-done.txt", "w")
+        f.close()
+        return
+
+    dict_uid = dict()
+    dict_uid_index = dict()
+    for uid_file in all_uid_file:
+        uid = uid_file.split("_")[1];
+
+        start_ts = -1.0
+        end_ts = start_ts
+        detectedOncePerTxt = False 
+        key = uid
+        with open(uid_file) as f:
+            (hasSessionDetect, lines) = filter_pat(f, session_tag)
+        
+            for line in lines:
+                items = line.split(" ")
+                if not detectedOncePerTxt and (hasSessionDetect or float(items[0]) == 0.000): 
+                    if not dict_uid_index.has_key(uid):
+                        dict_uid_index[uid] = 0
+                    else:
+                        dict_uid_index[uid] += 1
+                    detectedOncePerTxt =True
+                        
+                key = uid + "_" + str(dict_uid_index[uid])
+                if not dict_uid.has_key(key):
+                    dict_uid[key] = UserAv(key)
+
+                if os.path.getsize(items[1]) == 0:
+                    continue;
+
                 if opt == 2 and items[1].split(".")[1] != "aac": #aac
                     continue
                 elif opt == 3 and items[1].split(".")[1] == "aac": #mp4
@@ -460,24 +488,49 @@ def SessionConvert(folder_name, opt, saving):
                         start_ts = float(items[0])
                     else:
                         start_ts = 0
-                if saving:
-                    items[0] = "%.3f" % (float(items[0]) - start_ts + dict_uid[uid].mergedTxtDict[merged_index].last_ts) 
-                else:
-                    items[0] = "%.3f" % (float(items[0])) 
-                last_ts = float(items[0])
-                file = open(dict_uid[uid].mergedTxtDict[merged_index].path, "a")
-                file.write(' '.join(items))
-                file.close()
-            dict_uid[uid].mergedTxtDict[merged_index].last_ts = last_ts + 0.1
-    
-    all_merge_file = sorted(glob.glob("*_merge.txt"))
-    for merge_file in all_merge_file:
+                items[0] = "%.3f" % (float(items[0])) 
+
+                end_ts = float(items[0])
+                
+        clip = UserAvClip(start_ts, end_ts, uid_file)
+        dict_uid[key].addClip(clip)
+   
+    temp_files = []
+    for index in dict_uid.keys():
+        usr = dict_uid[index]
+        print "Merge for uid : " + usr.uid
+        concat_file = index + "_filelist.txt"
+        file = open(concat_file, "a")
+        last_ts = 0
+        merged_index = 0
+        for i in usr.avClips.keys():
+            clip = usr.avClips[i]
+            if saving:
+                last_ts = clip.start_time
+            output_file = UidFileConvert(clip.uid_file, "_" + str(merged_index) + "_av", opt, last_ts)
+            file.write("file \'" + output_file + "'\n")
+            merged_index += 1
+            if not saving:
+                last_ts = clip.end_time
+            temp_files.append(output_file)
+
+        file.close()
+
+        target_file_name = usr.uid + "_merge"
         if opt == 1:
-            UidFileConvert(merge_file, "_av", opt)
+            target_file_name += "_av.mp4"
+        elif opt == 2:
+            target_file_name += ".m4a"
         else:
-            UidFileConvert(merge_file, "", opt)
-        
-    os.system('rm -f *_merge.txt')
+            target_file_name += ".mp4"
+
+        command = "ffmpeg -f concat -i " + concat_file + " -c copy " + target_file_name
+        print command
+        subprocess.Popen(command, shell=True, env=child_env).wait()
+
+    os.system('rm -f *_filelist.txt')
+    for tem_file in temp_files:
+        os.system('rm -f ' + tem_file)
     
     #write a convert done file
     f = open("convert-done.txt", "w")
