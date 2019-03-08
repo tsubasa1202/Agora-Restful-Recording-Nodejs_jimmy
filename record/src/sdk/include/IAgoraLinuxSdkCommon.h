@@ -58,6 +58,7 @@ enum WARN_CODE_TYPE {
     WARN_LOOKUP_CHANNEL_REJECTED = 105,
     WARN_OPEN_CHANNEL_TIMEOUT = 106,
     WARN_OPEN_CHANNEL_REJECTED = 107,
+    WARN_RECOVERY_CORE_SERVICE_FAILURE = 108,
 };
 
 enum CHANNEL_PROFILE_TYPE
@@ -125,6 +126,28 @@ enum LANGUAGE_TYPE {
     CPP_LANG = 0,
     JAVA_LANG = 1
 };
+enum AUDIO_PROFILE_TYPE {
+    AUDIO_PROFILE_DEFAULT = 0, //use default settings.
+    AUDIO_PROFILE_HIGH_QUALITY = 1, //48khz, 128kbps, mono, music
+    AUDIO_PROFILE_HIGH_QUALITY_STEREO = 2, //48khz, 192kbps, stereo, music
+};
+
+enum agora_log_level {
+    AGORA_LOG_LEVEL_FATAL = 1,
+    AGORA_LOG_LEVEL_ERROR = 2,
+    AGORA_LOG_LEVEL_WARN = 3,
+    AGORA_LOG_LEVEL_NOTICE = 4,
+    AGORA_LOG_LEVEL_INFO = 5,
+    AGORA_LOG_LEVEL_DEBUG = 6,
+};
+
+enum MIXED_AV_CODEC_TYPE {
+    MIXED_AV_DEFAULT = 0,  
+    MIXED_AV_CODEC_V1 = 1,  
+    MIXED_AV_CODEC_V2 = 2,  
+};
+
+
 class AudioPcmFrame {
     public:
     AudioPcmFrame(u64_t frame_ms, uint_t sample_rates, uint_t samples);
@@ -148,7 +171,8 @@ class AudioAacFrame {
     const uchar_t *aacBuf_;
     u64_t frame_ms_;
     uint_t aacBufSize_;
-
+    uint_t channels_;
+    uint_t bitrate_;
 };
 
 struct AudioFrame {
@@ -160,7 +184,6 @@ struct AudioFrame {
 
     AudioFrame();
     ~AudioFrame();
-
     MEMORY_TYPE mType;
 };
 

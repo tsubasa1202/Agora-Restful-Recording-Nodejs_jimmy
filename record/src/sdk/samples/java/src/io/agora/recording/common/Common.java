@@ -106,13 +106,9 @@ public class Common{
       return value;
     }
   }
-  public class AUDIO_FRAME_TYPE {
-    public final int AUDIO_FRAME_RAW_PCM = 0;
-    public final int AUDIO_FRAME_AAC =1;
-    public int type = 1;
-    public int getValue(){
-      return type;
-    }
+  public enum AUDIO_FRAME_TYPE {
+    AUDIO_FRAME_RAW_PCM,
+    AUDIO_FRAME_AAC
   }
 
   public class VIDEO_FRAME_TYPE {
@@ -123,6 +119,19 @@ public class Common{
     public int getValue(){
       return type;
     }
+  }
+
+  public enum MIXED_AV_CODEC_TYPE {
+      MIXED_AV_DEFAULT(0),
+      MIXED_AV_CODEC_V1(1),
+      MIXED_AV_CODEC_V2(2);
+      private int value;
+      private MIXED_AV_CODEC_TYPE(int value) {
+          this.value = value;
+      }
+      private int getValue(){
+          return value;
+      }
   }
 
   public class AudioFrame {
@@ -147,9 +156,11 @@ public class Common{
       frame_ms = framems;
       aacBufSize = 0;
     }
-    public byte[] aacBuf;
     public long frame_ms;
+    public byte[] aacBuf;
     public long aacBufSize;
+    public int channels;
+    public int bitrate;
   }
   public class VideoYuvFrame {
     VideoYuvFrame(long framems, int width, int height, int ystride,int ustride, int vstride){

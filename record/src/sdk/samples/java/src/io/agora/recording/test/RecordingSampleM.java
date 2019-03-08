@@ -13,13 +13,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Vector;
-import java.util.Scanner;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.Iterator;
 
 import io.agora.recording.common.Common;
 import io.agora.recording.common.Common.AUDIO_FORMAT_TYPE;
+import io.agora.recording.common.Common.AUDIO_FRAME_TYPE;
 import io.agora.recording.common.Common.AudioFrame;
+import io.agora.recording.common.Common.AudioAacFrame;
 import io.agora.recording.common.Common.CHANNEL_PROFILE_TYPE;
 import io.agora.recording.common.Common.REMOTE_VIDEO_STREAM_TYPE;
 import io.agora.recording.common.Common.VIDEO_FORMAT_TYPE;
@@ -27,9 +29,11 @@ import io.agora.recording.common.Common.VideoFrame;
 import io.agora.recording.common.Common.VideoMixingLayout;
 import io.agora.recording.common.RecordingConfig;
 import io.agora.recording.common.RecordingEngineProperties;
+import io.agora.recording.common.Common.MIXED_AV_CODEC_TYPE;
 
 import io.agora.recording.RecordingSDK;
 import io.agora.recording.RecordingEventHandler;
+import java.util.Scanner;
 
 class RecordingCleanTimerM extends TimerTask {
     RecordingSampleM rs;
@@ -52,78 +56,83 @@ public class RecordingSampleM implements RecordingEventHandler {
 	private int kbps = 0;
 	private String storageDir = "./";
 	private long aCount = 0;
+  private long count = 0;
 	private long size = 0;
-    private boolean stopped = false;
+  private boolean stopped = false;
 	private CHANNEL_PROFILE_TYPE profile_type;
 	Vector<Long> m_peers = new Vector<Long>();
 	private long mNativeHandle = 0;
-    private RecordingConfig config = null;
+  private RecordingConfig config = null;
 	private RecordingSDK RecordingSDKInstance = null;
 
-    HashMap<String, UserInfo> audioChannels = new HashMap<String, UserInfo>();
-    HashMap<String, UserInfo> videoChannels = new HashMap<String, UserInfo>();
-    Timer cleanTimer = new Timer();
+  HashMap<String, UserInfo> audioChannels = new HashMap<String, UserInfo>();
+  HashMap<String, UserInfo> videoChannels = new HashMap<String, UserInfo>();
+  Timer cleanTimer = new Timer();
+  private int layoutMode = 0;
+  private long maxResolutionUid = -1;
+  public static final int DEFAULT_LAYOUT = 0;
+  public static final int BESTFIT_LAYOUT = 1;
+  public static final int VERTICALPRESENTATION_LAYOUT = 2;
 
-    public RecordingSampleM(RecordingSDK recording) {
+	public RecordingSampleM(RecordingSDK recording) {
 		this.RecordingSDKInstance = recording;
 		RecordingSDKInstance.registerOberserver(this);
 	}
-    private static void Help(){
-        System.out.println("Type \"start\" to start recording!(Only valid when \"triggerMode=1\")");
-        System.out.println("Type \"stop\" to stop recording!(Only valid when \"triggerMode=1\")");
-        System.out.println("Type \"getprop\" to call getProperties api!");
-        System.out.println("Type \"quit\" to leave recording channel!");
-    }
 
-    public static void main(String[] args) {
-        //should config -Djava.library.path to load library
-        RecordingSDK RecordingSdk = new RecordingSDK();
-        RecordingSampleM ars = new RecordingSampleM(RecordingSdk);
+  private static void Help(){
+    System.out.println("Type \"start\" to start recording!(Only valid when \"triggerMode=1\")");
+    System.out.println("Type \"stop\" to stop recording!(Only valid when \"triggerMode=1\")");
+    System.out.println("Type \"getprop\" to call getProperties api!");
+    System.out.println("Type \"quit\" to leave recording channel!");
+  }
 
-       Thread thread =  new Thread() {
-            @Override
-            public void run() {
-                ars.createChannel(args);
-            }
-        };
-       thread.start();
-
-        Scanner scn=new Scanner(System.in);
-        while(true) {
-            if(ars.stopped || !thread.isAlive()){
-                System.out.println("Jni layer has been exited,now exiting Java...!");
-            
-                break;
-            }
-            String input = scn.nextLine();
-            if(input.equals("quit")){
-                ars.leaveChannel(ars.mNativeHandle);
-                try {
-                    thread.join();
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }else if(input.equals("start")){
-                ars.startService(ars.mNativeHandle);
-            }else if(input.equals("stop")){
-                ars.stopService(ars.mNativeHandle);
-            }else if(input.equals("getprop")){
-                ars.getProperties(ars.mNativeHandle);
-            }else if(input.equals("help")){
-                Help();      
-            }else{
-                System.out.println("Undefined command:"+input+"  Try \"help\"");
-            }
-            try{
-                Thread.currentThread().sleep(1000);//sleep 1s
-            }catch(InterruptedException ie){
-                System.out.println("exception throwed!");
-            }
+  public static void main(String[] args) {
+    //should config -Djava.library.path to load library
+    RecordingSDK RecordingSdk = new RecordingSDK();
+    RecordingSampleM ars = new RecordingSampleM(RecordingSdk);
+    Thread thread =  new Thread() {
+        @Override
+        public void run() {
+            ars.createChannel(args);
         }
-        System.out.println("exit java process...");
+    };
+   thread.start();
 
-        ars.unRegister();
+    Scanner scn=new Scanner(System.in);
+    while(true) {
+        if(ars.stopped || !thread.isAlive()){
+            System.out.println("Jni layer has been exited,now exiting Java...!");
+
+            break;
+        }
+        String input = scn.nextLine();
+        if(input.equals("quit")){
+            ars.leaveChannel(ars.mNativeHandle);
+            try {
+                thread.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }else if(input.equals("start")){
+            ars.startService(ars.mNativeHandle);
+        }else if(input.equals("stop")){
+            ars.stopService(ars.mNativeHandle);
+        }else if(input.equals("getprop")){
+            ars.getProperties(ars.mNativeHandle);
+        }else if(input.equals("help")){
+            Help();
+        }else{
+            System.out.println("Undefined command:"+input+"  Try \"help\"");
+        }
+        try{
+            Thread.currentThread().sleep(1000);//sleep 1s
+        }catch(InterruptedException ie){
+            System.out.println("exception throwed!");
+        }
     }
+    System.out.println("exit java process...");
+    ars.unRegister();
+  }
 
 	public void unRegister(){
 		RecordingSDKInstance.unRegisterOberserver(this);	
@@ -133,43 +142,27 @@ public class RecordingSampleM implements RecordingEventHandler {
 		return isMixMode;
 	}
 
-    public boolean leaveChannel(long nativeHandle) {
-        return RecordingSDKInstance.leaveChannel(nativeHandle);
-    }
-
-    public int startService(long nativeHandle) {
-        return RecordingSDKInstance.startService(nativeHandle);
-    }
-
-    public int stopService(long nativeHandle) {
-        return RecordingSDKInstance.stopService(nativeHandle);
-    }
-
-    public RecordingEngineProperties getProperties(long nativeHandle) {
-        return RecordingSDKInstance.getProperties(nativeHandle);
-    }
-
-    public void nativeObjectRef(long nativeHandle) {
-        mNativeHandle = nativeHandle;
-    }
+	public void nativeObjectRef(long nativeHandle) {
+		mNativeHandle = nativeHandle;
+	}
 
 	public void onLeaveChannel(int reason) {
 		System.out.println("RecordingSDK onLeaveChannel,code:" + reason);
 	}
 
 	public void onError(int error, int stat_code) {
-        stopped = true;
+    stopped = true;
 		System.out.println("RecordingSDK onError,error:" + error + ",stat code:" + stat_code);
 	}
 
-    public void onWarning(int warn) {
-        System.out.println("RecordingSDK onWarning,warn:" + warn);
-    }
+  public void onWarning(int warn) {
+      System.out.println("RecordingSDK onWarning,warn:" + warn);
+  }
 
-    public void onJoinChannelSuccess(String channelId, long uid) {
-        cleanTimer.schedule(new RecordingCleanTimerM(this), 3000);
-        System.out.println("RecordingSDK joinChannel success, channelId:" + channelId +", uid:" + uid);
-    }
+  public void onJoinChannelSuccess(String channelId, long uid) {
+      cleanTimer.schedule(new RecordingCleanTimerM(this), 10000);
+      System.out.println("RecordingSDK joinChannel success, channelId:" + channelId +", uid:" + uid);
+  }
 
 	public void onUserOffline(long uid, int reason) {
 		System.out.println("RecordingSDK onUserOffline uid:" + uid + ",offline reason:" + reason);
@@ -178,34 +171,40 @@ public class RecordingSampleM implements RecordingEventHandler {
 		SetVideoMixingLayout();
 	}
 
-    protected void clean() {
-       synchronized(this) {
-           long now = System.currentTimeMillis();
-           for(String key : audioChannels.keySet()) {
-               UserInfo info = audioChannels.get(key);
-               if(now - info.last_receive_time > 3000) {
-                   audioChannels.remove(key);
-                   try{
-                       info.channel.close();
-                   }catch(IOException e) {
-                       e.printStackTrace();
-                   }
-               }
-           }
-           for(String key : videoChannels.keySet()) {
-               UserInfo info = videoChannels.get(key);
-               if(now - info.last_receive_time > 3000 ) {
-                   videoChannels.remove(key);
-                   try{
-                       info.channel.close();
-                   }catch(IOException e) {
-                       e.printStackTrace();
-                   }
-               }
-           }
+  protected void clean() {
+    synchronized(this) {
+      long now = System.currentTimeMillis();
+
+      Iterator<Map.Entry<String, UserInfo>> audio_it = audioChannels.entrySet().iterator();
+      while(audio_it.hasNext()) {
+        Map.Entry<String, UserInfo> entry = audio_it.next();
+        UserInfo info = entry.getValue();
+        if(now - info.last_receive_time > 3000) {
+            try{
+              info.channel.close();
+            }catch(IOException e) {
+              e.printStackTrace();
+            }
+            audio_it.remove();
+          }
        }
-       cleanTimer.schedule(new RecordingCleanTimerM(this), 3000);
-    }
+      Iterator<Map.Entry<String, UserInfo>> video_it = videoChannels.entrySet().iterator();
+      while(video_it.hasNext()) {
+        Map.Entry<String, UserInfo> entry = video_it.next();
+        UserInfo info = entry.getValue();
+         if(now - info.last_receive_time > 3000 ) {
+           try{
+               info.channel.close();
+           }catch(IOException e) {
+               e.printStackTrace();
+           }
+           video_it.remove();
+         }
+       }
+     }
+     cleanTimer.schedule(new RecordingCleanTimerM(this), 10000);
+  }
+
 
 	public void onUserJoined(long uid, String recordingDir) {
 		System.out.println("onUserJoined uid:" + uid + ",recordingDir:" + recordingDir);
@@ -216,63 +215,66 @@ public class RecordingSampleM implements RecordingEventHandler {
 		SetVideoMixingLayout();
 	}
 
-    private void checkUser(long uid, boolean isAudio) {
-         String path = storageDir + Long.toString(uid);
-         String key = Long.toString(uid);
-         synchronized(this) {
-             if(isAudio && !audioChannels.containsKey(key)) {
-                if(config.decodeAudio == AUDIO_FORMAT_TYPE.AUDIO_FORMAT_AAC_FRAME_TYPE ||
-                        config.decodeAudio == AUDIO_FORMAT_TYPE.AUDIO_FORMAT_PCM_FRAME_TYPE ||
-                        config.decodeAudio == AUDIO_FORMAT_TYPE.AUDIO_FORMAT_MIXED_PCM_FRAME_TYPE) {
-                    String audioPath;
-                    if(config.decodeAudio == AUDIO_FORMAT_TYPE.AUDIO_FORMAT_AAC_FRAME_TYPE) {
-                        audioPath = path + ".aac";
-                    }else {
-                        audioPath = path + ".pcm";
-                    }
-                    try {
-                        UserInfo info = new UserInfo();
-                        info.channel = new FileOutputStream(audioPath, true);
-                        info.last_receive_time = System.currentTimeMillis();
-                        audioChannels.put(key, info);
-                    } catch(FileNotFoundException e) {
-                        System.out.println("Can't find file : " + audioPath);
-                    }
-                }
-             }
+  private void checkUser(long uid, boolean isAudio) {
+       String path = storageDir + Long.toString(uid);
+       String key = Long.toString(uid);
+       synchronized(this) {
+           if(isAudio && !audioChannels.containsKey(key)) {
+              if(config.decodeAudio == AUDIO_FORMAT_TYPE.AUDIO_FORMAT_AAC_FRAME_TYPE ||
+                      config.decodeAudio == AUDIO_FORMAT_TYPE.AUDIO_FORMAT_PCM_FRAME_TYPE ||
+                      config.decodeAudio == AUDIO_FORMAT_TYPE.AUDIO_FORMAT_MIXED_PCM_FRAME_TYPE) {
+                  String audioPath;
+                  if(config.decodeAudio == AUDIO_FORMAT_TYPE.AUDIO_FORMAT_AAC_FRAME_TYPE) {
+                      audioPath = path + ".aac";
+                  }else {
+                      audioPath = path + ".pcm";
+                  }
+                  try {
+                      UserInfo info = new UserInfo();
+                      info.channel = new FileOutputStream(audioPath, true);
+                      info.last_receive_time = System.currentTimeMillis();
+                      audioChannels.put(key, info);
+                  } catch(FileNotFoundException e) {
+                      System.out.println("Can't find file : " + audioPath);
+                  }
+              }
+           }
 
-             if(!isAudio && !videoChannels.containsKey(key)) {
-                if(config.decodeVideo == VIDEO_FORMAT_TYPE.VIDEO_FORMAT_YUV_FRAME_TYPE || 
-                        config.decodeVideo == VIDEO_FORMAT_TYPE.VIDEO_FORMAT_H264_FRAME_TYPE) {
-                    String videoPath;
-                    if(config.decodeVideo == VIDEO_FORMAT_TYPE.VIDEO_FORMAT_H264_FRAME_TYPE) {
-                        videoPath = path + ".h264";
-                    } else {
-                        videoPath = path + ".yuv";
-                    }
-                    try {
-                        UserInfo info = new UserInfo();
-                        info.channel = new FileOutputStream(videoPath, true);
-                        info.last_receive_time = System.currentTimeMillis();
-                        videoChannels.put(key, info);
-                    } catch (FileNotFoundException e) {
-                        System.out.println("Can't find file : " + videoPath);
-                    }
-                }
-             }
-         }
+           if(!isAudio && !videoChannels.containsKey(key)) {
+              if(config.decodeVideo == VIDEO_FORMAT_TYPE.VIDEO_FORMAT_YUV_FRAME_TYPE || 
+                      config.decodeVideo == VIDEO_FORMAT_TYPE.VIDEO_FORMAT_H264_FRAME_TYPE) {
+                  String videoPath;
+                  if(config.decodeVideo == VIDEO_FORMAT_TYPE.VIDEO_FORMAT_H264_FRAME_TYPE) {
+                      videoPath = path + ".h264";
+                  } else {
+                      videoPath = path + ".yuv";
+                  }
+                  try {
+                      UserInfo info = new UserInfo();
+                      info.channel = new FileOutputStream(videoPath, true);
+                      info.last_receive_time = System.currentTimeMillis();
+                      videoChannels.put(key, info);
+                  } catch (FileNotFoundException e) {
+                      System.out.println("Can't find file : " + videoPath);
+                  }
+              }
+           }
+       }
+  }
+
+    public void onActiveSpeaker(long uid) {
+        System.out.println("User:"+uid+"is speaking");
     }
-
-	public void audioFrameReceived(long uid, int type, AudioFrame frame) {
+    public void audioFrameReceived(long uid, AudioFrame frame) {
 		// System.out.println("java demo
 		// audioFrameReceived,uid:"+uid+",type:"+type);
 		byte[] buf = null;
         long size = 0;
         checkUser(uid, true);
-		if (type == 0) {// pcm
+		if (frame.type == AUDIO_FRAME_TYPE.AUDIO_FRAME_RAW_PCM) {// pcm
 			buf = frame.pcm.pcmBuf;
             size = frame.pcm.pcmBufSize;
-		} else if (type == 1) {// aac
+		} else {// aac
 			buf = frame.aac.aacBuf;
             size = frame.aac.aacBufSize;
 		}
@@ -282,8 +284,8 @@ public class RecordingSampleM implements RecordingEventHandler {
 	public void videoFrameReceived(long uid, int type, VideoFrame frame, int rotation)// rotation:0,90,180,270
 	{
 		byte[] buf = null;
-        long size = 0;
-        checkUser(uid, false);
+    long size = 0;
+    checkUser(uid, false);
 		// System.out.println("java demovideoFrameReceived,uid:"+uid+",type:"+type);
 		if (type == 0) {// yuv
             buf = frame.yuv.buf;
@@ -313,7 +315,7 @@ public class RecordingSampleM implements RecordingEventHandler {
 	 * Brief: Callback when JNI layer exited
 	 */
 	public void stopCallBack() {
-        stopped = true;
+    stopped = true;
 		System.out.println("java demo receive stop from JNI ");
 	}
 
@@ -326,9 +328,14 @@ public class RecordingSampleM implements RecordingEventHandler {
 		storageDir = path;
 	}
 
-	private int SetVideoMixingLayout() {
-		Common ei = new Common();
-		Common.VideoMixingLayout layout = ei.new VideoMixingLayout();
+  private int SetVideoMixingLayout() {
+    Common ei = new Common();
+    Common.VideoMixingLayout layout = ei.new VideoMixingLayout();
+    int max_peers = profile_type == CHANNEL_PROFILE_TYPE.CHANNEL_PROFILE_COMMUNICATION ? 7:17;
+    if(m_peers.size() > max_peers) {
+        System.out.println("peers size is bigger than max m_peers:" + m_peers.size());
+        return -1;
+    }
 
 		if (!IsMixMode())
 			return -1;
@@ -338,51 +345,340 @@ public class RecordingSampleM implements RecordingEventHandler {
 		layout.backgroundColor = "#23b9dc";
 		layout.regionCount = (int) (m_peers.size());
 
-		if (!m_peers.isEmpty()) {
-			System.out.println("java setVideoMixingLayout m_peers is not empty, start layout");
-			int max_peers = (profile_type == CHANNEL_PROFILE_TYPE.CHANNEL_PROFILE_COMMUNICATION ? 7 : 17);
-			Common.VideoMixingLayout.Region[] regionList = new Common.VideoMixingLayout.Region[m_peers.size()];
-			regionList[0] = layout.new Region();
-			regionList[0].uid = m_peers.get(0);
-			regionList[0].x = 0.f;
-			regionList[0].y = 0.f;
-			regionList[0].width = 1.f;
-			regionList[0].height = 1.f;
-			regionList[0].zOrder = 0;
-			regionList[0].alpha = 1.f;
-			regionList[0].renderMode = 0;
-			float f_width = width;
-			float f_height = height;
-			float canvasWidth = f_width;
-			float canvasHeight = f_height;
-			float viewWidth = 0.235f;
-			float viewHEdge = 0.012f;
-			float viewHeight = viewWidth * (canvasWidth / canvasHeight);
-			float viewVEdge = viewHEdge * (canvasWidth / canvasHeight);
-			for (int i = 1; i < m_peers.size(); i++) {
-				if (i >= max_peers)
-					break;
-				regionList[i] = layout.new Region();
+    if (!m_peers.isEmpty()) {
+      System.out.println("java setVideoMixingLayout m_peers is not empty, start layout");
+      Common.VideoMixingLayout.Region[] regionList = new Common.VideoMixingLayout.Region[m_peers.size()];
+        System.out.println("mixing layout mode:"+layoutMode); 
+        if(layoutMode == BESTFIT_LAYOUT) {
+            adjustBestFitVideoLayout(regionList, layout);
+        }else if(layoutMode == VERTICALPRESENTATION_LAYOUT) {
+            adjustVerticalPresentationLayout(maxResolutionUid, regionList, layout);
+        }else {
+            adjustDefaultVideoLayout(regionList, layout);
+        }
 
-				regionList[i].uid = m_peers.get(i);
-				float f_x = (i - 1) % 4;
-				float f_y = (i - 1) / 4;
-				float xIndex = f_x;
-				float yIndex = f_y;
-				regionList[i].x = xIndex * (viewWidth + viewHEdge) + viewHEdge;
-				regionList[i].y = 1 - (yIndex + 1) * (viewHeight + viewVEdge);
-				regionList[i].width = viewWidth;
-				regionList[i].height = viewHeight;
-				regionList[i].zOrder = 0;
-				regionList[i].alpha = (i + 1);
-				regionList[i].renderMode = 0;
-			}
-			layout.regions = regionList;
-		} else {
-			layout.regions = null;
-		}
-		return RecordingSDKInstance.setVideoMixingLayout(mNativeHandle, layout);
-	}
+        layout.regions = regionList;
+
+    } else {
+        layout.regions = null;
+    }
+    return RecordingSDKInstance.setVideoMixingLayout(mNativeHandle, layout);
+  }
+  
+  private void adjustVerticalPresentationLayout(long maxResolutionUid, Common.VideoMixingLayout.Region[] regionList, Common.VideoMixingLayout layout) {
+     System.out.println("begin adjust vertical presentation layout,peers size:" + m_peers.size()+", maxResolutionUid:" + maxResolutionUid);
+      if(m_peers.size() <= 5) {
+          adjustVideo5Layout(maxResolutionUid, regionList, layout);
+      }else if(m_peers.size() <= 7) {
+          adjustVideo7Layout(maxResolutionUid, regionList, layout);
+      }else if(m_peers.size() <= 9) {
+          adjustVideo9Layout(maxResolutionUid, regionList, layout);
+      }else {
+          adjustVideo17Layout(maxResolutionUid, regionList, layout);
+      }
+  }
+
+  private void adjustBestFitVideoLayout(Common.VideoMixingLayout.Region[] regionList, Common.VideoMixingLayout layout) {
+      if(m_peers.size() == 1) {
+          adjustBestFitLayout_Square(regionList,1, layout);
+      }else if(m_peers.size() == 2) {
+          adjustBestFitLayout_2(regionList, layout);
+      }else if( 2 < m_peers.size() && m_peers.size() <=4) {
+          adjustBestFitLayout_Square(regionList,2, layout);
+      }else if(5<=m_peers.size() && m_peers.size() <=9) {
+          adjustBestFitLayout_Square(regionList,3, layout);
+      }else if(10<=m_peers.size() && m_peers.size() <=16) {
+          adjustBestFitLayout_Square(regionList,4, layout);
+      }else if(m_peers.size() ==17) {
+          adjustBestFitLayout_17(regionList, layout);
+      }else {
+         System.out.println("adjustBestFitVideoLayout is more than 17 users");
+      }
+  }
+
+  private void adjustBestFitLayout_2(Common.VideoMixingLayout.Region[] regionList, Common.VideoMixingLayout layout) {
+      float canvasWidth = (float)width;
+      float canvasHeight = (float)height;
+      float viewWidth = 0.235f;
+      float viewHEdge = 0.012f;
+      float viewHeight = viewWidth * (canvasWidth/canvasHeight);
+      float viewVEdge = viewHEdge * (canvasWidth/canvasHeight);
+      int peersCount = m_peers.size();
+      for (int i=0; i < peersCount; i++) {
+          regionList[i] = layout.new Region();
+          regionList[i].uid = m_peers.get(i);
+          regionList[i].x = (((i+1)%2) == 0) ?0:0.5;
+          regionList[i].y =  0.f;
+          regionList[i].width = 0.5f;
+          regionList[i].height = 1.f;
+          regionList[i].zOrder = 0;
+          regionList[i].alpha = i+1;
+          regionList[i].renderMode = 0;
+      }
+  }
+  private void adjustDefaultVideoLayout(Common.VideoMixingLayout.Region[] regionList, Common.VideoMixingLayout layout) {
+      regionList[0] = layout.new Region();
+      regionList[0].uid = m_peers.get(0);
+      regionList[0].x = 0.f;
+      regionList[0].y = 0.f;
+      regionList[0].width = 1.f;
+      regionList[0].height = 1.f;
+      regionList[0].zOrder = 0;
+      regionList[0].alpha = 1.f;
+      regionList[0].renderMode = 0;
+      float f_width = width;
+      float f_height = height;
+      float canvasWidth = f_width;
+      float canvasHeight = f_height;
+      float viewWidth = 0.235f;
+      float viewHEdge = 0.012f;
+      float viewHeight = viewWidth * (canvasWidth / canvasHeight);
+      float viewVEdge = viewHEdge * (canvasWidth / canvasHeight);
+      for (int i = 1; i < m_peers.size(); i++) {
+          regionList[i] = layout.new Region();
+
+      regionList[i].uid = m_peers.get(i);
+      float f_x = (i - 1) % 4;
+      float f_y = (i - 1) / 4;
+      float xIndex = f_x;
+      float yIndex = f_y;
+      regionList[i].x = xIndex * (viewWidth + viewHEdge) + viewHEdge;
+      regionList[i].y = 1 - (yIndex + 1) * (viewHeight + viewVEdge);
+      regionList[i].width = viewWidth;
+      regionList[i].height = viewHeight;
+      regionList[i].zOrder = 0;
+      regionList[i].alpha = (i + 1);
+      regionList[i].renderMode = 0;
+    }
+    layout.regions = regionList;
+  }
+
+  private void setMaxResolutionUid(int number, long maxResolutionUid, Common.VideoMixingLayout.Region[] regionList, double weight_ratio) {
+      regionList[number].uid = maxResolutionUid;
+      regionList[number].x = 0.f;
+      regionList[number].y = 0.f;
+      regionList[number].width = 1.f * weight_ratio;
+      regionList[number].height = 1.f;
+      regionList[number].zOrder = number;
+      regionList[number].alpha = 1.f;
+      regionList[number].renderMode = 1;
+  }
+  private void changeToVideo7Layout(long maxResolutionUid, Common.VideoMixingLayout.Region[] regionList, Common.VideoMixingLayout layout) {
+      System.out.println("changeToVideo7Layout");
+      adjustVideo7Layout(maxResolutionUid, regionList, layout);
+  }
+  private void changeToVideo9Layout(long maxResolutionUid, Common.VideoMixingLayout.Region[] regionList, Common.VideoMixingLayout layout) {
+      System.out.println("changeToVideo9Layout");
+      adjustVideo9Layout(maxResolutionUid, regionList, layout);
+  }
+  private void changeToVideo17Layout(long maxResolutionUid, Common.VideoMixingLayout.Region[] regionList, Common.VideoMixingLayout layout) {
+      System.out.println("changeToVideo17Layout");
+      adjustVideo17Layout(maxResolutionUid, regionList, layout);
+  }
+  private void adjustBestFitLayout_Square(Common.VideoMixingLayout.Region[] regionList, int nSquare, Common.VideoMixingLayout layout) {
+      float canvasWidth = (float)width;
+      float canvasHeight = (float)height;
+      float viewWidth = (float)(1.f * 1.0/nSquare);
+      float viewHEdge = (float)(1.f * 1.0/nSquare);
+      float viewHeight = viewWidth * (canvasWidth/canvasHeight);
+      float viewVEdge = viewHEdge * (canvasWidth/canvasHeight);
+      int peersCount = m_peers.size();
+      for (int i=0; i < peersCount; i++) {
+          regionList[i] = layout.new Region();
+          float xIndex =(float)(i%nSquare);
+          float yIndex = (float)(i/nSquare);
+          regionList[i].uid = m_peers.get(i);
+          regionList[i].x = 1.f * 1.0/nSquare * xIndex;
+          regionList[i].y = 1.f * 1.0/nSquare * yIndex;
+          regionList[i].width = viewWidth;
+          regionList[i].height = viewHEdge;
+          regionList[i].zOrder = 0;
+          regionList[i].alpha = (double)(i+1);
+          regionList[i].renderMode = 0;
+      }
+  }
+  private void adjustBestFitLayout_17(Common.VideoMixingLayout.Region[] regionList, Common.VideoMixingLayout layout) {
+      float canvasWidth = (float)width;
+      float canvasHeight = (float)height;
+      int n = 5;
+      float viewWidth = (float)(1.f * 1.0/n);
+      float viewHEdge = (float)(1.f * 1.0/n);
+      float totalWidth = (float)(1.f - viewWidth);
+      float viewHeight = viewWidth * (canvasWidth/canvasHeight);
+      float viewVEdge = viewHEdge * (canvasWidth/canvasHeight);
+      int peersCount = m_peers.size();
+      for (int i = 0; i < peersCount; i++) {
+          regionList[i] = layout.new Region();
+          float xIndex = (float)(i%(n-1));
+          float yIndex = (float)(i/(n-1));
+          regionList[i].uid = m_peers.get(i);
+          regionList[i].width = viewWidth;
+          regionList[i].height = viewHEdge;
+          regionList[i].zOrder = 0;
+          regionList[i].alpha = i+1;
+          regionList[i].renderMode = 0;
+          if(i == 16) {
+              regionList[i].x = (1-viewWidth)*(1.f/2) * 1.f;
+              System.out.println( "special layout for 17 x is:"+regionList[i].x);
+          }else {
+              regionList[i].x = 0.5f * viewWidth +  viewWidth * xIndex;
+          }
+          regionList[i].y =  (1.0/n) * yIndex;
+      }
+  }
+  private void adjustVideo5Layout(long maxResolutionUid, Common.VideoMixingLayout.Region[] regionList, Common.VideoMixingLayout layout) {
+      boolean flag = false;
+
+      float canvasWidth = (float)width;
+      float canvasHeight = (float)height;
+
+      float viewWidth = 0.235f;
+      float viewHEdge = 0.012f;
+      float viewHeight = viewWidth * (canvasWidth/canvasHeight);
+      float viewVEdge = viewHEdge * (canvasWidth/canvasHeight);
+      int number = 0;
+
+      int i=0;
+      for (; i<m_peers.size(); i++) {
+          regionList[i] = layout.new Region();
+          if(maxResolutionUid == m_peers.get(i)){
+              System.out.println("adjustVideo5Layout equal with configured user uid:" + maxResolutionUid);
+              flag = true;
+              setMaxResolutionUid(number,  maxResolutionUid, regionList,0.8);
+              number++;
+              continue;
+          }
+          regionList[number].uid = m_peers.get(i);
+          //float xIndex = ;
+          float yIndex = flag?((float)(number-1 % 4)):((float)(number % 4));
+          regionList[number].x = 1.f * 0.8;
+          regionList[number].y = (0.25) * yIndex;
+          regionList[number].width = 1.f*(1-0.8);
+          regionList[number].height = 1.f * (0.25);
+          regionList[number].zOrder = 0;
+          regionList[number].alpha = (double)number;
+          regionList[number].renderMode = 0;
+          number++;
+          if(i == 4 && !flag){
+              changeToVideo7Layout(maxResolutionUid, regionList, layout);
+          }
+      }
+  }
+
+
+
+	private void adjustVideo7Layout(long maxResolutionUid, Common.VideoMixingLayout.Region[] regionList, Common.VideoMixingLayout layout) {
+      boolean flag = false;
+      float canvasWidth = (float)width;
+      float canvasHeight = (float)height;
+
+      float viewWidth = 0.235f;
+      float viewHEdge = 0.012f;
+      float viewHeight = viewWidth * (canvasWidth/canvasHeight);
+      float viewVEdge = viewHEdge * (canvasWidth/canvasHeight);
+      int number = 0;
+
+      int i=0;
+      for (; i<m_peers.size(); i++) {
+          regionList[i] = layout.new Region();
+          if(maxResolutionUid == m_peers.get(i)){
+              System.out.println("adjustVideo7Layout equal with configured user uid:" + maxResolutionUid);
+              flag = true;
+              setMaxResolutionUid(number,  maxResolutionUid, regionList,6.f/7);
+              number++;
+              continue;
+          }
+          regionList[number].uid = m_peers.get(i);
+          float yIndex = flag?((float)number-1 % 6):((float)(number % 6));
+          regionList[number].x = 6.f/7;
+          regionList[number].y = (1.f/6) * yIndex;
+          regionList[number].width = (1.f/7);
+          regionList[number].height = (1.f/6);
+          regionList[number].zOrder = 0;
+          regionList[number].alpha = (double)number;
+          regionList[number].renderMode = 0;
+          number++;
+          if(i == 6 && !flag){
+              changeToVideo9Layout(maxResolutionUid, regionList, layout);
+          }
+      }
+
+    }
+    private void adjustVideo9Layout(long maxResolutionUid, Common.VideoMixingLayout.Region[] regionList, Common.VideoMixingLayout layout) {
+        boolean flag = false;
+
+        float canvasWidth = (float)width;
+        float canvasHeight = (float)height;
+
+        float viewWidth = 0.235f;
+        float viewHEdge = 0.012f;
+        float viewHeight = viewWidth * (canvasWidth/canvasHeight);
+        float viewVEdge = viewHEdge * (canvasWidth/canvasHeight);
+        int number = 0;
+
+        int i=0;
+        for (; i<m_peers.size(); i++) {
+            regionList[i] = layout.new Region();
+            if(maxResolutionUid == m_peers.get(i)){
+                System.out.println("adjustVideo9Layout equal with configured user uid:" + maxResolutionUid);
+                flag = true;
+                setMaxResolutionUid(number,  maxResolutionUid, regionList,9.f/5);
+                number++;
+                continue;
+            }
+            regionList[number].uid = m_peers.get(i);
+            float yIndex = flag?((float)(number-1 % 8)):((float)(number % 8));
+            regionList[number].x = 8.f/9;
+            regionList[number].y = (1.f/8) * yIndex;
+            regionList[number].width = 1.f/9 ;
+            regionList[number].height = 1.f/8;
+            regionList[number].zOrder = 0;
+            regionList[number].alpha = (double)number;
+            regionList[number].renderMode = 0;
+            number++;
+            if(i == 8 && !flag){
+                changeToVideo17Layout(maxResolutionUid, regionList, layout);
+            }
+        }
+    }
+
+    private void adjustVideo17Layout(long maxResolutionUid, Common.VideoMixingLayout.Region[] regionList, Common.VideoMixingLayout layout) {
+        boolean flag = false;
+        float canvasWidth = (float)width;
+        float canvasHeight = (float)height;
+
+        float viewWidth = 0.235f;
+        float viewHEdge = 0.012f;
+        float viewHeight = viewWidth * (canvasWidth/canvasHeight);
+        float viewVEdge = viewHEdge * (canvasWidth/canvasHeight);
+        int number = 0;
+        System.out.println("adjustVideo17Layoutenter m_peers size is:" + m_peers.size() + ", maxResolutionUid:" + maxResolutionUid);
+        for (int i=0; i<m_peers.size(); i++) {
+            regionList[i] = layout.new Region();
+            if(maxResolutionUid == m_peers.get(i)){
+                flag = true;
+                setMaxResolutionUid(number,  maxResolutionUid, regionList,0.8);
+                number++;
+                continue;
+            }
+            if(!flag && i == 16) {
+                System.out.println("Not the configured uid, and small regions is sixteen, so ignore this user:" + m_peers.get(i));
+                break;
+            }
+
+            regionList[number].uid = m_peers.get(i);
+            //float xIndex = 0.833f;
+            float yIndex = flag?((float)((number-1) % 8)):((float)(number % 8));
+            regionList[number].x = ((flag && i>8) || (!flag && i >=8)) ? (9.f/10):(8.f/10);
+            regionList[number].y = (1.f/8) * yIndex;
+            regionList[number].width =  1.f/10 ;
+            regionList[number].height = 1.f/8;
+            regionList[number].zOrder = 0;
+            regionList[number].alpha = (double)number;
+            regionList[number].renderMode = 0;
+            number++;
+        }
+    }
 
 	private void WriteBytesToFileClassic(long uid, byte[] byteBuffer, long size, boolean isAudio) {
 		if (byteBuffer == null) {
@@ -390,19 +686,20 @@ public class RecordingSampleM implements RecordingEventHandler {
 			return;
 		}
 
-        synchronized(this) {
-            try {
-                UserInfo info = isAudio ? audioChannels.get(Long.toString(uid)) : videoChannels.get(Long.toString(uid));
-                if(info != null) {
-                    info.channel.write(byteBuffer, 0, (int) size);
-                    info.channel.flush();
-                } else {
-                    System.out.println("Channel is null");
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
+    synchronized(this) {
+        try {
+            UserInfo info = isAudio ? audioChannels.get(Long.toString(uid)) : videoChannels.get(Long.toString(uid));
+            if(info != null) {
+                info.channel.write(byteBuffer, 0, (int) size);
+                info.channel.flush();
+                info.last_receive_time = System.currentTimeMillis();
+            } else {
+                System.out.println("Channel is null");
             }
+        } catch (IOException e) {
+            e.printStackTrace();
         }
+    }
 	}
 
 	private String GetNowDate() {
@@ -434,9 +731,11 @@ public class RecordingSampleM implements RecordingEventHandler {
 		int idleLimitSec = 5 * 60;// 300s
 
 		String applitePath = "";
-        String recordFileRootDir = "";
-        String cfgFilePath = "";
-        String proxyServer = "";
+    String recordFileRootDir = "";
+    String cfgFilePath = "";
+    String proxyServer = "";
+    String defaultVideoBgPath = "";
+    String defaultUserBgPath = "";
 
 
 		int lowUdpPort = 0;// 40000;
@@ -445,18 +744,23 @@ public class RecordingSampleM implements RecordingEventHandler {
 		boolean isAudioOnly = false;
 		boolean isVideoOnly = false;
 		boolean isMixingEnabled = false;
-		boolean mixedVideoAudio = false;
+    int mixedVideoAudio = MIXED_AV_CODEC_TYPE.MIXED_AV_DEFAULT.ordinal();
 
 		int getAudioFrame = AUDIO_FORMAT_TYPE.AUDIO_FORMAT_DEFAULT_TYPE.ordinal();
 		int getVideoFrame = VIDEO_FORMAT_TYPE.VIDEO_FORMAT_DEFAULT_TYPE.ordinal();
 		int streamType = REMOTE_VIDEO_STREAM_TYPE.REMOTE_VIDEO_STREAM_HIGH.ordinal();
-        int captureInterval = 5;
-        int triggerMode = 0;
+    int captureInterval = 5;
+    int triggerMode = 0;
 
-        int width = 0;
-        int height = 0;
+    int audioIndicationInterval = 0;
+    int logLevel = 5;
+
+    int width = 0;
+    int height = 0;
 		int fps = 0;
-        int kbps = 0;
+    int kbps = 0;
+    int count = 0;
+    int audioProfile = 0;
 
 		// paser command line parameters
 		if (args.length % 2 != 0) {
@@ -498,14 +802,21 @@ public class RecordingSampleM implements RecordingEventHandler {
 		Object StreamType = map.get("--streamType");
 		Object TriggerMode = map.get("--triggerMode");
 		Object ProxyServer = map.get("--proxyServer");
+    Object AudioProfile = map.get("--audioProfile");
+    Object DefaultVideoBg = map.get("--defaultVideoBg");
+    Object DefaultUserBg = map.get("--defaultUserBg");
+    Object LogLevel = map.get("--logLevel");
+    Object AudioIndicationInterval = map.get("--audioIndicationInterval");
+    Object LayoutMode = map.get("--layoutMode");
+    Object MaxResolutionUid = map.get("--maxResolutionUid");
 
 		if (Appid == null || Uid == null || Channel == null || AppliteDir == null) {
 			// print usage
-            String usage = "java RecordingSDK --appId STRING --uid UINTEGER32 --channel STRING --appliteDir STRING --channelKey STRING --channelProfile UINTEGER32 --isAudioOnly --isVideoOnly --isMixingEnabled --mixResolution STRING --mixedVideoAudio --decryptionMode STRING --secret STRING --idle INTEGER32 --recordFileRootDir STRING --lowUdpPort INTEGER32 --highUdpPort INTEGER32 --getAudioFrame UINTEGER32 --getVideoFrame UINTEGER32 --captureInterval INTEGER32 --cfgFilePath STRING --streamType UINTEGER32 --triggerMode INTEGER32 \r\n --appId     (App Id/must) \r\n --uid     (User Id default is 0/must)  \r\n --channel     (Channel Id/must) \r\n --appliteDir     (directory of app lite 'AgoraCoreService', Must pointer to 'Agora_Server_SDK_for_Linux_FULL/bin/' folder/must) \r\n --channelKey     (channelKey/option)\r\n --channelProfile     (channel_profile:(0:COMMUNICATION),(1:broadcast) default is 0/option)  \r\n --isAudioOnly     (Default 0:A/V, 1:AudioOnly (0:1)/option) \r\n --isVideoOnly     (Default 0:A/V, 1:VideoOnly (0:1)/option)\r\n --isMixingEnabled     (Mixing Enable? (0:1)/option)\r\n --mixResolution     (change default resolution for vdieo mix mode/option)                 \r\n --mixedVideoAudio     (mixVideoAudio:(0:seperated Audio,Video) (1:mixed Audio & Video), default is 0 /option)                 \r\n --decryptionMode     (decryption Mode, default is NULL/option)                 \r\n --secret     (input secret when enable decryptionMode/option)                 \r\n --idle     (Default 300s, should be above 3s/option)                 \r\n --recordFileRootDir     (recording file root dir/option)                 \r\n --lowUdpPort     (default is random value/option)                 \r\n --highUdpPort     (default is random value/option)                 \r\n --getAudioFrame     (default 0 (0:save as file, 1:aac frame, 2:pcm frame, 3:mixed pcm frame) (Can't combine with isMixingEnabled) /option)                 \r\n --getVideoFrame     (default 0 (0:save as file, 1:h.264, 2:yuv, 3:jpg buffer, 4:jpg file, 5:jpg file and video file) (Can't combine with isMixingEnabled) /option)              \r\n --captureInterval     (default 5 (Video snapshot interval (second)))                 \r\n --cfgFilePath     (config file path / option)                 \r\n --streamType     (remote video stream type(0:STREAM_HIGH,1:STREAM_LOW), default is 0/option)  \r\n --triggerMode     (triggerMode:(0: automatically mode, 1: manually mode) default is 0/option) \r\n --proxyServer    (proxyServer:format ip:port, eg,\"127.0.0.1:1080\"/option) \r\n";      
+            String usage = "java RecordingSDK --appId STRING --uid UINTEGER32 --channel STRING --appliteDir STRING --channelKey STRING --channelProfile UINTEGER32 --isAudioOnly --isVideoOnly --isMixingEnabled --mixResolution STRING --mixedVideoAudio --decryptionMode STRING --secret STRING --idle INTEGER32 --recordFileRootDir STRING --lowUdpPort INTEGER32 --highUdpPort INTEGER32 --getAudioFrame UINTEGER32 --getVideoFrame UINTEGER32 --captureInterval INTEGER32 --cfgFilePath STRING --streamType UINTEGER32 --triggerMode INTEGER32 \r\n --appId     (App Id/must) \r\n --uid     (User Id default is 0/must)  \r\n --channel     (Channel Id/must) \r\n --appliteDir     (directory of app lite 'AgoraCoreService', Must pointer to 'Agora_Server_SDK_for_Linux_FULL/bin/' folder/must) \r\n --channelKey     (channelKey/option)\r\n --channelProfile     (channel_profile:(0:COMMUNICATION),(1:broadcast) default is 0/option)  \r\n --isAudioOnly     (Default 0:A/V, 1:AudioOnly (0:1)/option) \r\n --isVideoOnly     (Default 0:A/V, 1:VideoOnly (0:1)/option)\r\n --isMixingEnabled     (Mixing Enable? (0:1)/option)\r\n --mixResolution     (change default resolution for vdieo mix mode/option)                 \r\n --mixedVideoAudio     (mixVideoAudio:(0:seperated Audio,Video) (1:mixed Audio & Video with legacy codec) (2:mixed Audio & Video with new codec) default is 0 /option)                 \r\n --decryptionMode     (decryption Mode, default is NULL/option)                 \r\n --secret     (input secret when enable decryptionMode/option)                 \r\n --idle     (Default 300s, should be above 3s/option)                 \r\n --recordFileRootDir     (recording file root dir/option)                 \r\n --lowUdpPort     (default is random value/option)                 \r\n --highUdpPort     (default is random value/option)                 \r\n --getAudioFrame     (default 0 (0:save as file, 1:aac frame, 2:pcm frame, 3:mixed pcm frame) (Can't combine with isMixingEnabled) /option)                 \r\n --getVideoFrame     (default 0 (0:save as file, 1:h.264, 2:yuv, 3:jpg buffer, 4:jpg file, 5:jpg file and video file) (Can't combine with isMixingEnabled) /option)              \r\n --captureInterval     (default 5 (Video snapshot interval (second)))                 \r\n --cfgFilePath     (config file path / option)                 \r\n --streamType     (remote video stream type(0:STREAM_HIGH,1:STREAM_LOW), default is 0/option)  \r\n --triggerMode     (triggerMode:(0: automatically mode, 1: manually mode) default is 0/option) \r\n --proxyServer     proxyServer:format ip:port, eg,\"127.0.0.1:1080\"/option \r\n --defaultVideoBg    (default user background image path/option) \r\n --defaultUserBg (default user background image path/option))  \r\n --audioProfile (audio profile(0: standard single channel, 1: high quality single channel, 2: high quality two channels) defualt is 0/option)   \r\n --logLevel (log level default INFO/option) \r\n --audioIndicationInterval(0: no indication, audio indication interval(ms) default is 0/option) \r\n --layoutMode    (mix video layout mode:(0: default layout, 1:bestFit Layout mode, 2:vertical presentation Layout mode, default is 0/option)(combine with isMixingEnabled)) \r\n --maxResolutionUid    (max resolution uid (uid with maxest resolution under vertical presentation Layout mode  ( default is -1 /option))";      
             System.out.println("Usage:" + usage);
             return;
         }
-        appId = String.valueOf(Appid);
+    appId = String.valueOf(Appid);
 		uid = Integer.parseInt(String.valueOf(Uid));
 		appId = String.valueOf(Appid);
 		name = String.valueOf(Channel);
@@ -537,43 +848,56 @@ public class RecordingSampleM implements RecordingEventHandler {
 			isVideoOnly = true;
 		if (IsMixingEnabled != null && (Integer.parseInt(String.valueOf(IsMixingEnabled)) == 1))
 			isMixingEnabled = true;
-		if (MixedVideoAudio != null && (Integer.parseInt(String.valueOf(MixedVideoAudio)) == 1))
-			mixedVideoAudio = true;
+		if (MixedVideoAudio != null)
+			mixedVideoAudio = Integer.parseInt(String.valueOf(MixedVideoAudio));
 		if (GetAudioFrame != null)
 			getAudioFrame = Integer.parseInt(String.valueOf(GetAudioFrame));
 		if (GetVideoFrame != null)
 			getVideoFrame = Integer.parseInt(String.valueOf(GetVideoFrame));
 		if (StreamType != null)
-            streamType = Integer.parseInt(String.valueOf(StreamType));
-        if (CaptureInterval != null)
-            captureInterval = Integer.parseInt(String.valueOf(CaptureInterval));
-        if(TriggerMode != null) triggerMode = Integer.parseInt(String.valueOf(TriggerMode));
-        if(ProxyServer != null) proxyServer = String.valueOf(ProxyServer);
+        streamType = Integer.parseInt(String.valueOf(StreamType));
+    if (CaptureInterval != null)
+        captureInterval = Integer.parseInt(String.valueOf(CaptureInterval));
+    if(AudioIndicationInterval != null) audioIndicationInterval = Integer.parseInt(String.valueOf(AudioIndicationInterval));
+    if(TriggerMode != null) triggerMode = Integer.parseInt(String.valueOf(TriggerMode));
+    if(ProxyServer != null) proxyServer = String.valueOf(ProxyServer);
+    if(AudioProfile != null) audioProfile = Integer.parseInt(String.valueOf(AudioProfile));
+    if(DefaultVideoBg != null) defaultVideoBgPath = String.valueOf(DefaultVideoBg);
+    if(DefaultUserBg != null) defaultUserBgPath = String.valueOf(DefaultUserBg);
+    if(LogLevel != null) logLevel = Integer.parseInt(String.valueOf(LogLevel));
+    if(LayoutMode != null) layoutMode = Integer.parseInt(String.valueOf(LayoutMode));
+    if(MaxResolutionUid != null) maxResolutionUid = Long.parseLong(String.valueOf(MaxResolutionUid));
+    System.out.println(" maxResolutionUid = "+maxResolutionUid);
 
+    if(audioProfile > 2) audioProfile = 2;
+    if(audioProfile < 0) audioProfile = 0;
 
-        RecordingConfig config = new RecordingConfig();
-        config.channelProfile = CHANNEL_PROFILE_TYPE.values()[channelProfile];
-        config.idleLimitSec = idleLimitSec;
-        config.isVideoOnly = isVideoOnly;
-        config.isAudioOnly = isAudioOnly;
-        config.isMixingEnabled = isMixingEnabled;
-        config.mixResolution = mixResolution;
-        config.mixedVideoAudio = mixedVideoAudio;
-        config.appliteDir = applitePath;
-        config.recordFileRootDir = recordFileRootDir;
-        config.cfgFilePath = cfgFilePath;
-        config.secret = secret;
-        config.decryptionMode = decryptionMode;
-        config.lowUdpPort = lowUdpPort;
-        config.highUdpPort = highUdpPort;
-        config.captureInterval = captureInterval;
-        config.decodeAudio = AUDIO_FORMAT_TYPE.values()[getAudioFrame];
-        config.decodeVideo = VIDEO_FORMAT_TYPE.values()[getVideoFrame];
-        config.streamType = REMOTE_VIDEO_STREAM_TYPE.values()[streamType];
-        config.triggerMode = triggerMode;
-        config.proxyServer = proxyServer;
-
-        this.config = config;
+    RecordingConfig config = new RecordingConfig();
+    config.channelProfile = CHANNEL_PROFILE_TYPE.values()[channelProfile];
+    config.idleLimitSec = idleLimitSec;
+    config.isVideoOnly = isVideoOnly;
+    config.isAudioOnly = isAudioOnly;
+    config.isMixingEnabled = isMixingEnabled;
+    config.mixResolution = mixResolution;
+    config.mixedVideoAudio = MIXED_AV_CODEC_TYPE.values()[mixedVideoAudio];
+    config.appliteDir = applitePath;
+    config.recordFileRootDir = recordFileRootDir;
+    config.cfgFilePath = cfgFilePath;
+    config.secret = secret;
+    config.decryptionMode = decryptionMode;
+    config.lowUdpPort = lowUdpPort;
+    config.highUdpPort = highUdpPort;
+    config.captureInterval = captureInterval;
+    config.audioIndicationInterval = audioIndicationInterval;
+    config.decodeAudio = AUDIO_FORMAT_TYPE.values()[getAudioFrame];
+    config.decodeVideo = VIDEO_FORMAT_TYPE.values()[getVideoFrame];
+    config.streamType = REMOTE_VIDEO_STREAM_TYPE.values()[streamType];
+    config.triggerMode = triggerMode;
+    config.proxyServer = proxyServer;
+    config.audioProfile = audioProfile;
+    config.defaultVideoBgPath = defaultVideoBgPath;
+    config.defaultUserBgPath = defaultUserBgPath;
+    this.config = config;
 
 		/*
 		 * change log_config Facility per your specific purpose like
@@ -582,8 +906,10 @@ public class RecordingSampleM implements RecordingEventHandler {
 		 * ars.setFacility(LOCAL5_LOG_FCLT);
 		 */
 
-        System.out.println(System.getProperty("java.library.path"));
+    System.out.println(System.getProperty("java.library.path"));
 
+    if(logLevel < 1) logLevel = 1;
+    if(logLevel > 6) logLevel = 6;
 
 		this.isMixMode = isMixingEnabled;
 		this.profile_type = CHANNEL_PROFILE_TYPE.values()[channelProfile];
@@ -599,10 +925,24 @@ public class RecordingSampleM implements RecordingEventHandler {
 			this.kbps = Integer.valueOf(sourceStrArray[3]).intValue();
 		}
 		// run jni event loop , or start a new thread to do it
-		RecordingSDKInstance.createChannel(appId, channelKey, name, uid, config);
-        cleanTimer.cancel();
+    RecordingSDKInstance.createChannel(appId, channelKey, name, uid, config, logLevel);
+    cleanTimer.cancel();
 		System.out.println("jni layer has been exited...");
 	}
+
+    public boolean leaveChannel(long nativeHandle) { 
+        return RecordingSDKInstance.leaveChannel(nativeHandle);
+    }
+    public int startService(long nativeHandle) {
+        return RecordingSDKInstance.startService(nativeHandle);
+    }
+    public int stopService(long nativeHandle) {
+        return RecordingSDKInstance.stopService(nativeHandle);
+    }
+
+    public RecordingEngineProperties getProperties(long nativeHandle) {
+        return RecordingSDKInstance.getProperties(nativeHandle);
+    }
 
   
 }
